@@ -202,13 +202,18 @@ class EmitHtml(out: PrintStream) {
 }
 
 object EmitHtml extends PageDriver {
+  import scala.tools.nsc.settings.ScalaVersion
 
-  def emitHtml(className: String, outStream: OutputStream): Unit = emitHtml(className, new PrintStream(outStream))
+  def prettily(version: ScalaVersion): String = version.unparse
 
-  def emitHtml(className: String, out: PrintStream): Unit = {
+  def emitHtml(className: String, version: ScalaVersion, out: OutputStream): Unit = emitHtml(className, version, new PrintStream(out))
+
+  def emitHtml(className: String, version: ScalaVersion, out: PrintStream): Unit = {
     val emitter = new EmitHtml(out)
     try {
-      emitter.emitDocument(generate(className))
+      val document = generate(className)
+      document.version = prettily(version)
+      emitter.emitDocument(document)
     } catch {
       case e: Exception =>
         e.printStackTrace()
@@ -218,8 +223,8 @@ object EmitHtml extends PageDriver {
   }
 
   def main(args: Array[String]) = args match {
-    case Array(classname)           => emitHtml(classname, System.out)
-    case Array(classname, file, _*) => emitHtml(classname, new java.io.FileOutputStream(file))
+    case Array(classname)           => emitHtml(classname, ScalaVersion.current, System.out)
+    case Array(classname, file, _*) => emitHtml(classname, ScalaVersion.current, new java.io.FileOutputStream(file))
     case _                          => System.exit(1)
   }
 }

@@ -8,14 +8,16 @@ package scala.tools.docutil
 
 import java.nio.file.{Files, Path, Paths}
 
+import scala.tools.nsc.settings.ScalaVersion
+
 class ManMaker(htmlout: Path, manout: Path) {
 
-  def makeMan(command: String): Unit = {
+  def makeMan(version: ScalaVersion, command: String): Unit = {
     val classname = s"scala.man1.$command"
 
     val htmlFile = htmlout.resolve(s"$command.html")
     val htmlOut  = Files.newOutputStream(htmlFile)
-    EmitHtml.emitHtml(classname, htmlOut)
+    EmitHtml.emitHtml(classname, version, htmlOut)
 
     val manFile = manout.resolve("man1").resolve(s"$command.1")
     val manOut  = Files.newOutputStream(manFile)
@@ -25,10 +27,14 @@ class ManMaker(htmlout: Path, manout: Path) {
 
 /** Command line runner for ManMaker which is called from the sbt build. */
 object ManMaker {
+  import scala.util.Try
+  object V {
+    def unapply(s: String): Option[ScalaVersion] = Try(ScalaVersion(s)).toOption
+  }
   def main(args: Array[String]): Unit = {
-    val Array(commands, htmlout, manout) = args
+    val Array(V(version), commands, htmlout, manout) = args
     val mm = new ManMaker(Paths get htmlout, Paths get manout)
     for (command <- commands.split(",").map(_.trim()) if command.nonEmpty)
-      mm.makeMan(command)
+      mm.makeMan(version, command)
   }
 }
