@@ -9,10 +9,8 @@ package scala.man1
  *  @author Lex Spoon
  *  @version 1.0
  */
-object fsc extends Command {
+class fsc extends Command {
   import scala.tools.docutil.ManPage._
-
-  protected def cn = new Error().getStackTrace()(0).getClassName()
 
   val name = Section("NAME",
 
@@ -24,7 +22,17 @@ object fsc extends Command {
     CmdLine(" [ " & Argument("options") & " ] " &
             Argument("source files")))
 
-  val parameters = scalac.parameters
+  val parameters = Section("PARAMETERS",
+
+    DefinitionList(
+      Definition(
+        Mono(Argument("options")),
+        "Command line options. See " & Link(Bold("OPTIONS"), "#options") &
+        " below."),
+      Definition(
+        Mono(Argument("source files")),
+        "One or more source files to be compiled (such as " &
+        Mono("MyClass.scala") & ").")))
 
   val description = Section("DESCRIPTION",
 

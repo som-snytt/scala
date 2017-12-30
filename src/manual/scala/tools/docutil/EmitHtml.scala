@@ -230,13 +230,8 @@ trait PageDriver {
     generator(className).manpage
   }
   private def generator(className: String): PageGenerator = {
-    //import scala.reflect.internal.util.ScalaClassLoader
-    //val sc = ScalaClassLoader(getClass.getClassLoader)
-    //val gen = sc.create[PageGenerator](className, err => throw new RuntimeException(err))()
-    val scalish = raw"(.*)\.scala".r
-    val module = className match { case scalish(prefix) => s"$prefix.Scala" case _ => className }
-    val cl = this.getClass.getClassLoader()
-    val clasz = cl.loadClass(module + "$")
-    clasz.getDeclaredField("MODULE$").get(null).asInstanceOf[PageGenerator]
+    import scala.reflect.internal.util.ScalaClassLoader
+    val sc = new ClassLoader(getClass.getClassLoader) with ScalaClassLoader
+    sc.create[PageGenerator](className, err => throw new RuntimeException(err))()
   }
 }

@@ -12,8 +12,11 @@ import scala.tools.docutil.ManPage._
  */
 trait Command {
 
-  protected def cn: String
-  lazy val command = cn.substring(cn.lastIndexOf(".") + 1, cn.length() - 1).toLowerCase
+  protected def cn: String = getClass.getName
+  lazy val command = cn.lastIndexOf(".") match {
+    case -1 => cn
+    case i  => cn.substring(i + 1)
+  }
 
   protected def MBold(contents: AbstractText) = Mono(Bold(contents))
   protected def MItalic(contents: AbstractText) = Mono(Italic(contents))

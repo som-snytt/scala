@@ -5,10 +5,8 @@
 
 package scala.man1
 
-object scalac extends Command {
+class scalac extends Command {
   import scala.tools.docutil.ManPage._
-
-  protected def cn = new Error().getStackTrace()(0).getClassName()
 
   val name = Section("NAME",
 

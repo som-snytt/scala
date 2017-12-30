@@ -9,10 +9,8 @@ package scala.man1
  *  @author Stephane Micheloud
  *  @version 1.0
  */
-object Scala extends Command {
+class scala extends Command {
   import scala.tools.docutil.ManPage._
-
-  protected def cn = new Error().getStackTrace()(0).getClassName()
 
   val name = Section("NAME",
 
