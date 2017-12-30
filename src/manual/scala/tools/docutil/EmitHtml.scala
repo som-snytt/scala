@@ -203,16 +203,20 @@ class EmitHtml(out: PrintStream) {
 
 object EmitHtml extends PageDriver {
   import scala.tools.nsc.settings.ScalaVersion
+  import java.time.{LocalDate, format}, format.DateTimeFormatter
 
   def prettily(version: ScalaVersion): String = version.unparse
+  def prettily(date: LocalDate): String = DateTimeFormatter.ofPattern("MMMM yyyy").format(date)
 
-  def emitHtml(className: String, version: ScalaVersion, out: OutputStream): Unit = emitHtml(className, version, new PrintStream(out))
+  def emitHtml(className: String, version: ScalaVersion, dated: LocalDate, out: OutputStream): Unit =
+    emitHtml(className, version, dated, new PrintStream(out))
 
-  def emitHtml(className: String, version: ScalaVersion, out: PrintStream): Unit = {
+  def emitHtml(className: String, version: ScalaVersion, dated: LocalDate, out: PrintStream): Unit = {
     val emitter = new EmitHtml(out)
     try {
       val document = generate(className)
       document.version = prettily(version)
+      document.date    = prettily(dated)
       emitter.emitDocument(document)
     } catch {
       case e: Exception =>
@@ -223,8 +227,8 @@ object EmitHtml extends PageDriver {
   }
 
   def main(args: Array[String]) = args match {
-    case Array(classname)           => emitHtml(classname, ScalaVersion.current, System.out)
-    case Array(classname, file, _*) => emitHtml(classname, ScalaVersion.current, new java.io.FileOutputStream(file))
+    case Array(classname)           => emitHtml(classname, ScalaVersion.current, LocalDate.now, System.out)
+    case Array(classname, file, _*) => emitHtml(classname, ScalaVersion.current, LocalDate.now, new java.io.FileOutputStream(file))
     case _                          => System.exit(1)
   }
 }
