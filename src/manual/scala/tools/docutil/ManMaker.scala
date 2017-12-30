@@ -6,22 +6,20 @@
 
 package scala.tools.docutil
 
-import java.io.{File, FileOutputStream}
+import java.nio.file.{Files, Path, Paths}
 
-class ManMaker(htmlout: File, manout: File) {
+class ManMaker(htmlout: Path, manout: Path) {
 
   def makeMan(command: String): Unit = {
-    val classname = "scala.man1."+ command
+    val classname = s"scala.man1.$command"
 
-    val htmlFileName = htmlout.getPath + File.separator +
-                       command + ".html"
-    val htmlFile = new java.io.FileOutputStream(htmlFileName)
-    EmitHtml.emitHtml(classname, htmlFile)
+    val htmlFile = htmlout.resolve(s"$command.html")
+    val htmlOut  = Files.newOutputStream(htmlFile)
+    EmitHtml.emitHtml(classname, htmlOut)
 
-    val manFileName = manout.getPath + File.separator +
-                      "man1" + File.separator + command + ".1"
-    val manFile = new FileOutputStream(manFileName)
-    EmitManPage.emitManPage(classname, manFile)
+    val manFile = manout.resolve("man1").resolve(s"$command.1")
+    val manOut  = Files.newOutputStream(manFile)
+    EmitManPage.emitManPage(classname, manOut)
   }
 }
 
@@ -29,7 +27,7 @@ class ManMaker(htmlout: File, manout: File) {
 object ManMaker {
   def main(args: Array[String]): Unit = {
     val Array(commands, htmlout, manout) = args
-    val mm = new ManMaker(new File(htmlout), new File(manout))
+    val mm = new ManMaker(Paths get htmlout, Paths get manout)
     for (command <- commands.split(",").map(_.trim()) if command.nonEmpty)
       mm.makeMan(command)
   }
