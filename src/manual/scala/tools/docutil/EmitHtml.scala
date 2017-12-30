@@ -6,12 +6,10 @@
 
 package scala.tools.docutil
 
-object EmitHtml {
-  import scala.xml.{Node, NodeBuffer, NodeSeq, XML}
-  import ManPage._
+import java.io.{OutputStream, PrintStream}
+import ManPage._
 
-  val out = Console
-
+class EmitHtml(out: PrintStream) {
   def escape(text: String) =
     text.replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
@@ -201,26 +199,44 @@ object EmitHtml {
     out println "</body>"
     out println "</html>"
   }
+}
 
-  def main(args: Array[String]) = args match{
-    case Array(classname)           => emitHtml(classname)
-    case Array(classname, file, _*) => emitHtml(classname, new java.io.FileOutputStream(file))
-    case _                          => sys.exit(1)
-  }
+object EmitHtml extends PageDriver {
 
-  def emitHtml(classname: String, outStream: java.io.OutputStream = out.out) {
-    if(outStream != out.out) out setOut outStream
+  def emitHtml(className: String, outStream: OutputStream): Unit = emitHtml(className, new PrintStream(outStream))
+
+  def emitHtml(className: String, out: PrintStream): Unit = {
+    val emitter = new EmitHtml(out)
     try {
-      val cl = this.getClass.getClassLoader()
-      val clasz = cl loadClass classname
-      val meth = clasz getDeclaredMethod "manpage"
-      val doc = meth.invoke(null).asInstanceOf[Document]
-      emitDocument(doc)
+      emitter.emitDocument(generate(className))
     } catch {
-      case ex: Exception =>
-        ex.printStackTrace()
-        System.err println "Error in EmitManPage"
+      case e: Exception =>
+        e.printStackTrace()
+        System.err.println("Error in EmitManPage")
         sys.exit(1)
     }
+  }
+
+  def main(args: Array[String]) = args match {
+    case Array(classname)           => emitHtml(classname, System.out)
+    case Array(classname, file, _*) => emitHtml(classname, new java.io.FileOutputStream(file))
+    case _                          => System.exit(1)
+  }
+}
+
+trait PageDriver {
+  type PageGenerator = scala.man1.Command
+  def generate(className: String): Document = {
+    generator(className).manpage
+  }
+  private def generator(className: String): PageGenerator = {
+    //import scala.reflect.internal.util.ScalaClassLoader
+    //val sc = ScalaClassLoader(getClass.getClassLoader)
+    //val gen = sc.create[PageGenerator](className, err => throw new RuntimeException(err))()
+    val scalish = raw"(.*)\.scala".r
+    val module = className match { case scalish(prefix) => s"$prefix.Scala" case _ => className }
+    val cl = this.getClass.getClassLoader()
+    val clasz = cl.loadClass(module + "$")
+    clasz.getDeclaredField("MODULE$").get(null).asInstanceOf[PageGenerator]
   }
 }

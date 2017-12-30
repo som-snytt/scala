@@ -10,10 +10,10 @@ package scala.tools.docutil
 // - http://www.linuxfocus.org/English/November2003/article309.shtml
 // - http://www.schweikhardt.net/man_page_howto.html
 
-object EmitManPage {
-  import ManPage._
+import java.io.{OutputStream, PrintStream}
+import ManPage._
 
-  val out = Console
+class EmitManPage(out: PrintStream) {
 
   def escape(text: String) =
     text.replaceAll("-", "\\-")
@@ -75,7 +75,7 @@ object EmitManPage {
             if (n > 1) { out.println; n -= 1 }
           }
 
-        case Link(label, url) =>
+        case Link(label, url @ _) =>
           emitText(label)
 
         case _ =>
@@ -162,26 +162,26 @@ object EmitManPage {
 
     doc.sections foreach (s => emitSection(s, 1))
   }
+}
 
-  def main(args: Array[String]) = args match{
-    case Array(classname)           => emitManPage(classname)
-    case Array(classname, file, _*) => emitManPage(classname, new java.io.FileOutputStream(file))
-    case _                          => sys.exit(1)
-  }
+object EmitManPage extends PageDriver {
 
-  def emitManPage(classname: String, outStream: java.io.OutputStream = out.out) {
-    if(outStream != out.out) out setOut outStream
+  def emitManPage(className: String, outStream: OutputStream): Unit = emitManPage(className, new PrintStream(outStream))
+
+  def emitManPage(className: String, out: PrintStream): Unit = {
+    val emitter = new EmitManPage(out)
     try {
-      val cl = this.getClass.getClassLoader()
-      val clasz = cl loadClass classname
-      val meth = clasz getDeclaredMethod "manpage"
-      val doc = meth.invoke(null).asInstanceOf[Document]
-      emitDocument(doc)
+      emitter.emitDocument(generate(className))
     } catch {
-      case ex: Exception =>
-        ex.printStackTrace()
-        System.err println "Error in EmitManPage"
+      case e: Exception =>
+        e.printStackTrace()
+        System.err.println("Error in EmitManPage")
         sys.exit(1)
     }
+  }
+  def main(args: Array[String]) = args match {
+    case Array(classname)           => emitManPage(classname, System.out)
+    case Array(classname, file, _*) => emitManPage(classname, new java.io.FileOutputStream(file))
+    case _                          => sys.exit(1)
   }
 }

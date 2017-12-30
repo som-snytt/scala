@@ -6,7 +6,7 @@
 package scala.man1
 
 object scalac extends Command {
-  import _root_.scala.tools.docutil.ManPage._
+  import scala.tools.docutil.ManPage._
 
   protected def cn = new Error().getStackTrace()(0).getClassName()
 

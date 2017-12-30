@@ -714,7 +714,22 @@ lazy val manual = configureAsSubproject(project)
   .settings(disableDocs)
   .settings(disablePublishing)
   .settings(
-    libraryDependencies ++= Seq(scalaXmlDep, antDep, "org.scala-lang" % "scala-library" % scalaVersion.value),
+    scalacOptions ++= Seq(
+      "-feature",
+      "-deprecation",
+      "-unchecked",
+      "-Xlint",
+      "-Xfatal-warnings",
+      "-Ywarn-unused:params,patvars",
+      "-Ywarn-adapted-args",
+      "-Ywarn-dead-code",
+      "-Ywarn-value-discard",
+      ""
+    ),
+    libraryDependencies ++= Seq(
+      "org.scala-lang" % "scala-library" % scalaVersion.value,
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value
+    ),
     classDirectory in Compile := (target in Compile).value / "classes"
   )
 

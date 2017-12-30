@@ -2,18 +2,18 @@
  * Copyright 2005-2013 LAMP/EPFL
  * @author Stephane Micheloud
  */
-
 package scala.man1
+
+import scala.tools.docutil.ManPage._
 
 /**
  *  @author Stephane Micheloud
  *  @version 1.0
  */
 trait Command {
-  import _root_.scala.tools.docutil.ManPage._
 
   protected def cn: String
-  def command = cn.substring(cn.lastIndexOf(".") + 1, cn.length() - 1)
+  lazy val command = cn.substring(cn.lastIndexOf(".") + 1, cn.length() - 1).toLowerCase
 
   protected def MBold(contents: AbstractText) = Mono(Bold(contents))
   protected def MItalic(contents: AbstractText) = Mono(Italic(contents))
