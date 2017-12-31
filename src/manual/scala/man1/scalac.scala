@@ -69,6 +69,7 @@ class scalac extends Command {
   def definitionOf(s: settings.Setting) =
     s match {
       case p: settings.PrefixSetting => prefixDefinitionOf(p)
+      case m: settings.MultiChoiceSetting[_] => multiDefinitionOf(m)
       case _                         => standardDefinitionOf(s)
     }
   def prefixDefinitionOf(s: settings.PrefixSetting) = {
@@ -83,6 +84,12 @@ class scalac extends Command {
       )
       case _                        => ???
     }
+    Definition(term, help)
+  }
+  def multiDefinitionOf(s: settings.MultiChoiceSetting[_]) = {
+    val Array(Dashless(cmd), summary) = s.helpSyntax.split(':')
+    val (term, help) =
+        (CmdOptionBound(cmd, summary), SeqPara((s.choices zip s.descriptions).map { case (c, d) => SeqPara(Mono(c), Text(d)) }: _*))
     Definition(term, help)
   }
   def standardDefinitionOf(s: settings.Setting) = {
