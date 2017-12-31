@@ -5,8 +5,11 @@
 
 package scala.man1
 
+import scala.util.matching._
+
 class scalac extends Command {
   import scala.tools.docutil.ManPage._
+  import scala.tools.nsc.Settings
 
   val name = Section("NAME",
 
@@ -40,6 +43,56 @@ class scalac extends Command {
     "as its source file. You can specify a separate destination directory " &
     "with -d (see " & Link(Bold("OPTIONS"), "#options") & ", below).")
 
+  object Kind extends Enumeration { val Standard, Advanced, Private = Value }
+  import Kind.{Standard, Advanced, Private}
+  val settings = new Settings
+  def kind(s: settings.Setting) = if (s.isStandard) Standard else if (s.isAdvanced) Advanced else Private
+  val groupedOptions = settings.visibleSettings.toList.sortBy(_.name).groupBy(kind)
+
+  private val specialStandard = "-([A-W])(.*)".r    // -D, -J but not -X -Y
+  private val argument = "<(.*)>".r             // option argument <flag>
+  def replaceArguments(text: String, regex: Regex, replacer: (String => AbstractText)): AbstractText = {
+    def recurse(s: String): AbstractText =
+      regex.findFirstMatchIn(s) match {
+        case Some(m) =>
+          val before = m.before.toString
+          val after  = m.after.toString
+          val arg    = if (m.groupCount > 0) m.group(1) else ""
+          if (before.isEmpty) replacer(arg) & recurse(after)
+          else Text(before) & replacer(arg) & recurse(after)
+        case None    => Text(s)
+      }
+    recurse(text)
+  }
+  def definitionOf(s: settings.Setting) =
+    s match {
+      case p: settings.PrefixSetting => prefixDefinitionOf(p)
+      case _                         => standardDefinitionOf(s)
+    }
+  def prefixDefinitionOf(s: settings.PrefixSetting) = {
+    val (term, help) = s.name match {
+      case specialStandard(c, argument(arg)) => (
+        CmdOptionBound(c, Argument(arg)),
+        replaceArguments(s.helpDescription, argument, x => Mono(Argument(x)))
+      )
+      case specialStandard(c, rest) => (
+        CmdOptionBound(c, rest),
+        replaceArguments(s.helpDescription, Regex.quote(s.name).r, x => CmdOptionBound(c, rest))
+      )
+      case _                        => ???
+    }
+    Definition(term, help)
+  }
+  def standardDefinitionOf(s: settings.Setting) = {
+    val (term, help) = s.name match {
+      case _                        => (
+        CmdOption(s.name.stripPrefix("-")),
+        Text(s"${s.helpDescription} {${s.helpSyntax}}")
+      )
+    }
+    Definition(term, help)
+  }
+
   val options = Section("OPTIONS",
 
     "The compiler has a set of standard options that are supported on the " &
@@ -47,6 +100,10 @@ class scalac extends Command {
     "releases. An additional set of non-standard options are specific to " &
     "the current virtual machine implementation and are subject to change " &
     "in the future.  Non-standard options begin with " & MBold("-X") & ".",
+
+    Section("Standard Options", DefinitionList(groupedOptions(Standard).map(definitionOf): _*)),
+    Section("Advanced Options", DefinitionList(groupedOptions(Advanced).map(definitionOf): _*)),
+    Section("Private Options", DefinitionList(groupedOptions(Private).map(definitionOf): _*)),
 
     Section("Standard Options",
       DefinitionList(
