@@ -176,7 +176,7 @@ object EmitManPage extends PageDriver {
       case e: Exception =>
         e.printStackTrace()
         System.err.println("Error in EmitManPage")
-        sys.exit(1)
+        throw e
     }
   }
   def main(args: Array[String]) = args match {

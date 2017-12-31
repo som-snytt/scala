@@ -2,10 +2,11 @@
  * Copyright 2005-2013 LAMP/EPFL
  * @author Stephane Micheloud
  */
-
 package scala.man1
 
 import scala.util.matching._
+
+object Dashless { def unapply(s: String): Option[String] = Some(s.stripPrefix("-")) }
 
 class scalac extends Command {
   import scala.tools.docutil.ManPage._
@@ -49,8 +50,9 @@ class scalac extends Command {
   def kind(s: settings.Setting) = if (s.isStandard) Standard else if (s.isAdvanced) Advanced else Private
   val groupedOptions = settings.visibleSettings.toList.sortBy(_.name).groupBy(kind)
 
-  private val specialStandard = "-([A-W])(.*)".r    // -D, -J but not -X -Y
-  private val argument = "<(.*)>".r             // option argument <flag>
+  private val specialStandard = "-([A-W])(.*)".r               // -D, -J but not -X -Y -Z
+  private val argument = "<(.*)>".r                            // option argument <flag>
+  private val splitting = "([^ :]+)(?::([^ ]+))?(?: +(.*))?".r  // cmd:arg1 arg2
   def replaceArguments(text: String, regex: Regex, replacer: (String => AbstractText)): AbstractText = {
     def recurse(s: String): AbstractText =
       regex.findFirstMatchIn(s) match {
@@ -58,8 +60,8 @@ class scalac extends Command {
           val before = m.before.toString
           val after  = m.after.toString
           val arg    = if (m.groupCount > 0) m.group(1) else ""
-          if (before.isEmpty) replacer(arg) & recurse(after)
-          else Text(before) & replacer(arg) & recurse(after)
+          val prefix = if (before.isEmpty) replacer(arg) else Text(before) & replacer(arg)
+          if (after.isEmpty) prefix else prefix & recurse(after)
         case None    => Text(s)
       }
     recurse(text)
@@ -84,12 +86,16 @@ class scalac extends Command {
     Definition(term, help)
   }
   def standardDefinitionOf(s: settings.Setting) = {
-    val (term, help) = s.name match {
-      case _                        => (
-        CmdOption(s.name.stripPrefix("-")),
-        Text(s"${s.helpDescription} {${s.helpSyntax}}")
-      )
-    }
+    def nontrivial(x: String) = x != null && "" != x
+    val splitting(Dashless(cmd), arg1, arg2) = s.helpSyntax       // -cmd, maybe nonempty colon or standalone arg
+    val (term, help) =
+      if (nontrivial(arg1)) {
+        (CmdOptionBound(cmd, arg1), Text(s.helpDescription))
+      } else if (nontrivial(arg2)) {
+        (CmdOption(cmd, arg2), Text(s.helpDescription))
+      } else {
+        (CmdOption(cmd), Text(s.helpDescription))
+      }
     Definition(term, help)
   }
 

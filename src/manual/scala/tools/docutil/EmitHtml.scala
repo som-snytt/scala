@@ -221,8 +221,8 @@ object EmitHtml extends PageDriver {
     } catch {
       case e: Exception =>
         e.printStackTrace()
-        System.err.println("Error in EmitManPage")
-        sys.exit(1)
+        System.err.println("Error in EmitHtml")
+        throw e
     }
   }
 
@@ -241,6 +241,7 @@ trait PageDriver {
   private def generator(className: String): PageGenerator = {
     import scala.reflect.internal.util.ScalaClassLoader
     val sc = new ClassLoader(getClass.getClassLoader) with ScalaClassLoader
-    sc.create[PageGenerator](className, err => throw new RuntimeException(err))()
+    //sc.create[PageGenerator](className, err => throw new RuntimeException(err))()
+    sc.create[PageGenerator](className, err => ())()
   }
 }
