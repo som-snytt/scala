@@ -68,7 +68,8 @@ class EmitHtml(out: PrintStream) {
           out print "\""
 
         case DefinitionList(definitions @ _*) =>
-          out println "<ins><dl>"
+          //out println "<ins><dl>"
+          out println "<dl>"
           for (d <- definitions) {
             out println "<dt>"
             emitText(d.term)
@@ -77,7 +78,8 @@ class EmitHtml(out: PrintStream) {
             emitText(d.description)
             out println "</dd>"
           }
-          out println "</dl></ins>"
+          out println "</dl>"
+          //out println "</dl></ins>"
 
         case Link(label, url) =>
            out.print("<a href=\"" + url + "\">")

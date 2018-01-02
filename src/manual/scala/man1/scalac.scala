@@ -69,6 +69,7 @@ class scalac extends Command {
   def definitionOf(s: settings.Setting) =
     s match {
       case p: settings.PrefixSetting => prefixDefinitionOf(p)
+      case c: settings.ChoiceSetting => choiceDefinitionOf(c)
       case m: settings.MultiChoiceSetting[_] => multiDefinitionOf(m)
       case _                         => standardDefinitionOf(s)
     }
@@ -86,10 +87,22 @@ class scalac extends Command {
     }
     Definition(term, help)
   }
+  def choiceDefinitionOf(s: settings.ChoiceSetting) = {
+    val Array(Dashless(cmd), summary) = s.helpSyntax.split(':')
+    if (s.choicesHelp.isEmpty) {
+      val term = CmdOptionBound(cmd, s.choices.mkString(":{", ",", "}"))
+      Definition(term, s.helpDescription)
+    } else {
+      val argument(arg) = summary
+      val term = CmdOptionBound(cmd, ":" & Argument(arg))
+      val help = DefinitionList((s.choices zip s.choicesHelp).map { case (c, d) => Definition(Mono(c), Text(d)) }: _*)
+      Definition(term, help)
+    }
+  }
   def multiDefinitionOf(s: settings.MultiChoiceSetting[_]) = {
     val Array(Dashless(cmd), summary) = s.helpSyntax.split(':')
-    val (term, help) =
-        (CmdOptionBound(cmd, summary), SeqPara((s.choices zip s.descriptions).map { case (c, d) => SeqPara(Mono(c), Text(d)) }: _*))
+    val term = CmdOptionBound(cmd, ":" + summary)
+    val help = DefinitionList((s.choices zip s.descriptions).map { case (c, d) => Definition(Mono(c), Text(d)) }: _*)
     Definition(term, help)
   }
   def standardDefinitionOf(s: settings.Setting) = {
@@ -97,7 +110,8 @@ class scalac extends Command {
     val splitting(Dashless(cmd), arg1, arg2) = s.helpSyntax       // -cmd, maybe nonempty colon or standalone arg
     val (term, help) =
       if (nontrivial(arg1)) {
-        (CmdOptionBound(cmd, arg1), Text(s.helpDescription))
+        (CmdOptionBound(cmd, Text(":") & Argument(arg1)), Text(s.helpDescription))
+        //(CmdOptionBound(cmd, ":" + arg1), Text(s.helpDescription))
       } else if (nontrivial(arg2)) {
         (CmdOption(cmd, arg2), Text(s.helpDescription))
       } else {

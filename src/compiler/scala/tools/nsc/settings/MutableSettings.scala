@@ -582,7 +582,7 @@ class MutableSettings(val errorFn: String => Unit)
   class OutputSetting private[nsc](
     private[nsc] val outputDirs: OutputDirs,
     default: String)
-    extends StringSetting("-d", "directory|jar", "destination for generated classfiles.", default, None) {
+    extends StringSetting("-d", "directory|jar", "Specify destination for generated classfiles.", default, None) {
       value = default
       override def value_=(str: String) {
         super.value_=(str)
