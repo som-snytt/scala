@@ -325,4 +325,48 @@ class IteratorTest {
     assertSameElements(List(10,11,13), scan)
     assertSameElements(List(10,-1,-1,-11,11,-2,-2,-13,13,-3), results)
   }
+  // scala/bug#10892
+  @Test def `iterator string says what it knows and no more`(): Unit = {
+    val generic = new AbstractIterator[Int] { def hasNext = false ; def next() = ??? }
+    assertEquals("<iterator>", generic.toString)
+
+    val (lo, hi) = (1 to 10).toIterator.span(_ <= 5)
+    assertEquals("<iterator>", lo.toString)
+    assertEquals("<iterator>", hi.toString)
+    assertTrue(lo.hasNext)
+    assertEquals("non-empty iterator", lo.toString)
+    assertEquals(1, lo.next())
+    assertEquals("<iterator>", lo.toString)
+    assertTrue(hi.hasNext)
+    assertEquals("non-empty iterator", lo.toString)
+    assertEquals("non-empty iterator", hi.toString)
+    assertEquals(5, {lo.next();lo.next();lo.next();lo.next()})
+    assertEquals("empty iterator", lo.toString)
+    assertEquals("non-empty iterator", hi.toString)
+    assertEquals(6, hi.next())
+    assertEquals("<iterator>", hi.toString)
+    assertEquals(10, {hi.next();hi.next();hi.next();hi.next()})
+    assertEquals("<iterator>", hi.toString)
+    assertFalse(hi.hasNext)
+    assertEquals("empty iterator", hi.toString)
+
+    val buf = (1 to 10).toList.toIterator.buffered
+    assertEquals("<iterator>", buf.toString)
+    assertTrue(buf.hasNext)
+    assertEquals("<iterator>", buf.toString)
+    assertEquals(1, buf.head)
+    assertEquals("non-empty iterator", buf.toString)
+    assertEquals(1, buf.next())
+    assertEquals("<iterator>", buf.toString)
+
+    val both = Iterator(1) ++ Iterator(2)
+    assertEquals("<iterator>", both.toString)
+    assertTrue(both.hasNext)
+    assertEquals("non-empty iterator", both.toString)
+    assertEquals(1, both.next())
+    assertEquals("<iterator>", both.toString)
+    assertEquals(2, both.next())
+    assertFalse(both.hasNext)
+    assertEquals("empty iterator", both.toString)
+  }
 }

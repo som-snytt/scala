@@ -23,6 +23,10 @@ import immutable.Stream
  */
 object Iterator {
 
+  private final val Exhausted = "empty iterator"
+  private final val Mysterios = "<iterator>"
+  private final val Repletish = "non-empty iterator"
+
   /** With the advent of `TraversableOnce` and `Iterator`, it can be useful to have a builder which
    *  operates on `Iterator`s so they can be treated uniformly along with the collections.
    *  See `scala.util.Random.shuffle` for an example.
@@ -36,6 +40,7 @@ object Iterator {
   val empty: Iterator[Nothing] = new AbstractIterator[Nothing] {
     def hasNext: Boolean = false
     def next(): Nothing = throw new NoSuchElementException("next on empty iterator")
+    override def toString = Exhausted
   }
 
   /** Creates an iterator which produces a single element.
@@ -46,11 +51,12 @@ object Iterator {
    *          and which has no further elements.
    */
   def single[A](elem: A): Iterator[A] = new AbstractIterator[A] {
-    private var hasnext = true
+    private[this] var hasnext = true
     def hasNext: Boolean = hasnext
     def next(): A =
       if (hasnext) { hasnext = false; elem }
       else empty.next()
+    override def toString = if (hasnext) "iterator of a single element" else Exhausted
   }
 
   /** Creates an iterator with given elements.
@@ -120,6 +126,7 @@ object Iterator {
         result
       }
       else empty.next()
+    override def toString = if (hasNext) Repletish else Exhausted
   }
 
   /** Creates an infinite iterator that repeatedly applies a given function to the previous result.
@@ -138,6 +145,7 @@ object Iterator {
 
       acc
     }
+    override def toString = Repletish
   }
 
   /** Creates an infinite-length iterator which returns successive values from some start value.
@@ -157,6 +165,7 @@ object Iterator {
     private var i = start
     def hasNext: Boolean = true
     def next(): Int = { val result = i; i += step; result }
+    override def toString = Repletish
   }
 
   /** Creates an infinite-length iterator returning the results of evaluating an expression.
@@ -168,6 +177,7 @@ object Iterator {
   def continually[A](elem: => A): Iterator[A] = new AbstractIterator[A] {
     def hasNext = true
     def next = elem
+    override def toString = Repletish
   }
 
   /** Creates an iterator to which other iterators can be appended efficiently.
@@ -229,16 +239,21 @@ object Iterator {
 
     override def ++[B >: A](that: => GenTraversableOnce[B]): Iterator[B] = {
       val c = new ConcatIteratorCell[B](that, null).asInstanceOf[ConcatIteratorCell[A]]
-      if(tail eq null) {
+      if (tail eq null) {
         tail = c
         last = c
       } else {
         last.tail = c
         last = c
       }
-      if(current eq null) current = Iterator.empty
+      if (current eq null) current = Iterator.empty
       this
     }
+
+    override def toString =
+      if (currentHasNextChecked) Repletish
+      else if (current eq null) Exhausted
+      else Mysterios
   }
 
   private[this] final class ConcatIteratorCell[A](head: => GenTraversableOnce[A], var tail: ConcatIteratorCell[A]) {
@@ -287,10 +302,9 @@ object Iterator {
         this
       }
     }
+    override def toString = if (remaining == 0) Exhausted else Mysterios
   }
 }
-
-import Iterator.empty
 
 /** Iterators are data structures that allow to iterate over a sequence
  *  of elements. They have a `hasNext` method for checking
@@ -356,6 +370,8 @@ import Iterator.empty
  */
 trait Iterator[+A] extends TraversableOnce[A] {
   self =>
+
+  import Iterator.{Exhausted, Mysterios, Repletish, empty}
 
   def seq: Iterator[A] = this
 
@@ -750,6 +766,11 @@ trait Iterator[+A] extends TraversableOnce[A] {
           false
       }
       def trailer: A = hd
+      override def toString = status match {
+        case 0 => Mysterios
+        case 1 => Repletish
+        case _ => if (hasNext) Repletish else Exhausted
+      }
     }
 
     val leading = new Leading
@@ -760,37 +781,38 @@ trait Iterator[+A] extends TraversableOnce[A] {
        *   -1 not yet accessed
        *   0 single element waiting in leading
        *   1 defer to self
+       *   2 self.hasNext already
+       *   3 exhausted
        */
       private[this] var status = -1
-      def hasNext = {
-        if (status > 0) self.hasNext
-        else {
-          if (status == 0) true
-          else if (myLeading.finish()) {
-            status = 0
-            true
-          }
-          else {
-            status = 1
-            myLeading = null
-            self.hasNext
-          }
-        }
+      def hasNext = status match {
+        case 3 => false
+        case 2 => true
+        case 1 => if (self.hasNext) { status = 2 ; true } else { status = 3 ; false }
+        case 0 => true
+        case _ =>
+          if (myLeading.finish()) { status = 0 ; true } else { status = 1 ; myLeading = null ; hasNext }
       }
       def next() = {
         if (hasNext) {
-          if (status > 0) self.next()
-          else {
+          if (status == 0) {
             status = 1
-            val ans = myLeading.trailer
+            val res = myLeading.trailer
             myLeading = null
-            ans
+            res
+          } else {
+            status = 1
+            self.next()
           }
         }
         else Iterator.empty.next()
       }
 
-      override def toString = "unknown-if-empty iterator"
+      override def toString = status match {
+        case 0 | 2 => Repletish
+        case 3 => Exhausted
+        case _ => Mysterios
+      }
     }
 
     (leading, trailing)
@@ -1094,6 +1116,8 @@ trait Iterator[+A] extends TraversableOnce[A] {
         hdDefined = false
         hd
       } else self.next()
+
+    override def toString = if (hdDefined) Repletish else Mysterios
   }
 
   /** A flexible iterator for transforming an `Iterator[A]` into an
@@ -1418,14 +1442,13 @@ trait Iterator[+A] extends TraversableOnce[A] {
     if (self.hasNext) Stream.cons(self.next(), self.toStream)
     else Stream.empty[A]
 
-
   /** Converts this iterator to a string.
    *
    *  @return `"empty iterator"` or `"non-empty iterator"`, depending on
    *           whether or not the iterator is empty.
    *  @note    Reuse: $preservesIterator
    */
-  override def toString = (if (hasNext) "non-empty" else "empty")+" iterator"
+  override def toString = Mysterios
 }
 
 /** Explicit instantiation of the `Iterator` trait to reduce class file size in subclasses. */
