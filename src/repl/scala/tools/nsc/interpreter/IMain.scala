@@ -446,7 +446,9 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
   def compileString(code: String): Boolean =
     compileSources(new BatchSourceFile("<script>", code))
 
-  /** Build a request from the user. `trees` is `line` after being parsed.
+  /** Build a request from the user. `trees` is `line` after being parsed,
+   *  including synthetic `val res0 =` on last term, if needed.
+   *  Here, also add 
    */
   private[interpreter] def buildRequest(line: String, trees: List[Tree]): Request = {
     executingRequest = new Request(line, trees)
@@ -471,22 +473,17 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
     val content = line
 
     val trees: List[global.Tree] = parse(content) match {
-      case parse.Incomplete(_)     => return Left(IR.Incomplete)
-      case parse.Error(_)          => return Left(IR.Error)
+      case parse.Incomplete(_)  => return Left(IR.Incomplete)
+      case parse.Error(_)       => return Left(IR.Error)
       case parse.Success(trees) => trees
     }
     repltrace(
-      trees map (t => {
-        // [Eugene to Paul] previously it just said `t map ...`
-        // because there was an implicit conversion from Tree to a list of Trees
-        // however Martin and I have removed the conversion
-        // (it was conflicting with the new reflection API),
-        // so I had to rewrite this a bit
+      trees.map { t =>
         val subs = t collect { case sub => sub }
-        subs map (t0 =>
+        subs.map(t0 =>
           "  " + safePos(t0, -1) + ": " + t0.shortClass + "\n"
-        ) mkString ""
-      }) mkString "\n"
+        ).mkString
+      }.mkString("\n")
     )
     // If the last tree is a bare expression, pinpoint where it begins using the
     // AST node position and snap the line off there.  Rewrite the code embodied
@@ -528,9 +525,9 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
               "    line" -> line,
               " content" -> content,
               "     was" -> l2,
-              "combined" -> combined) map {
+              "combined" -> combined).map {
                 case (label, s) => label + ": '" + s + "'"
-              } mkString "\n"
+              }.mkString("\n")
             )
             combined
           }
@@ -807,9 +804,6 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
 
   /** One line of code submitted by the user for interpretation */
   class Request(val line: String, val trees: List[Tree], generousImports: Boolean = false) {
-    def defines    = defHandlers flatMap (_.definedSymbols)
-    def imports    = importedSymbols
-    def value      = Some(handlers.last) filter (h => h.definesValue) map (h => definedSymbols(h.definesTerm.get)) getOrElse NoSymbol
     val lineRep = new ReadEvalPrint()
 
     private var _originalLine: String = null
@@ -817,13 +811,11 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
     def originalLine = if (_originalLine == null) line else _originalLine
 
     /** handlers for each tree in this request */
-    val handlers: List[MemberHandler] = trees map (memberHandlers chooseHandler _)
+    val handlers: List[MemberHandler] = trees.map(memberHandlers.chooseHandler)
     val definesClass = handlers.exists {
       case _: ClassHandler => true
       case _ => false
     }
-
-    def defHandlers = handlers collect { case x: MemberDefHandler => x }
 
     /** list of names used by this expression */
     val referencedNames: List[Name] = handlers flatMap (_.referencedNames)
@@ -835,6 +827,12 @@ class IMain(initialSettings: Settings, protected val out: JPrintWriter) extends 
       case x: ImportHandler => x.importedSymbols
       case _                => Nil
     }
+
+    def defHandlers = handlers collect { case x: MemberDefHandler => x }
+
+    def defines    = defHandlers flatMap (_.definedSymbols)
+    def imports    = importedSymbols
+    def value      = Some(handlers.last) filter (h => h.definesValue) map (h => definedSymbols(h.definesTerm.get)) getOrElse NoSymbol
 
     /** Code to import bound names from previous lines - accessPath is code to
       * append to objectName to access anything bound by request.
