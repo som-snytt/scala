@@ -33,13 +33,13 @@ trait PositionFiltering extends InternalReporter with Filtering {
     severity match {
       case INFO => true
       case WARNING if noWarnings => false
-      case _ => !testAndLog(pos, severity, msg) || { suppressed(pos, msg, severity) ; false }
+      case _ => !testAndLog(pos, msg, severity) || { suppressed(pos, msg, severity) ; false }
     }
 
   /** Logs a position and returns true if it was already logged.
    *  @note  Two positions are considered identical for logging if they have the same point.
    */
-  private def testAndLog(pos: Position, severity: Severity, msg: String): Boolean =
+  protected def testAndLog(pos: Position, msg: String, severity: Severity): Boolean =
     pos != null && pos.isDefined && {
       val fpos     = pos.focus
       val suppress = positions(fpos) match {
