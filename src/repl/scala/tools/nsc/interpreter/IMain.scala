@@ -218,7 +218,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
 
     try reporter.withoutPrintingResults(body) catch { case NonFatal(t) =>
       repldbg("withLastExceptionLock: " + rootCause(t))
-      reporter.trace(stackTraceString(rootCause(t)))
+      reporter.debug(stackTraceString(rootCause(t)))
       alt
     } finally bindExceptions = true
   }
@@ -457,6 +457,27 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
   def dealiasNonPublic(tp: Type) = tp match {
     case TypeRef(_, sym, _) if sym.isAliasType && !sym.isPublic => tp.dealias
     case _                                                      => tp
+  }
+
+  // parseStats, returning status but no trees
+  def parseString(line: String): Result = parse(line).fold(e => e, _ => Success)
+
+  def tokenize(line: String): List[TokenData] = {
+    import collection.mutable.ListBuffer
+    val u = newUnitScanner(newCompilationUnit(line))
+    u.init()
+    val b = ListBuffer.empty[Int]
+    while (u.token != 0) {
+      b += u.lastOffset
+      b += u.token
+      b += u.offset
+      u.nextToken()
+    }
+    b += u.lastOffset
+    b.drop(1).grouped(3).flatMap(triple => triple.toList match {
+      case List(token, start, end) => Some(TokenData(token, start, end))
+      case _ => println(s"Skipping token ${scala.runtime.ScalaRunTime.stringOf(triple)}") ; None
+    }).toList
   }
 
   /**
@@ -1094,6 +1115,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     var isIncomplete = false
     currentRun.parsing.withIncompleteHandler((_, _) => isIncomplete = true) {
       reporter.reset()
+
       val unit = newCompilationUnit(line, label)
       val trees = newUnitParser(unit).parseStats()
       if (reporter.hasErrors) Left(Error)

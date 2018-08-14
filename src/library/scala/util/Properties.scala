@@ -37,7 +37,7 @@ private[scala] trait PropertiesTrait {
   /** The loaded properties */
   protected lazy val scalaProps: java.util.Properties = {
     val props = new java.util.Properties
-    val stream = pickJarBasedOn getResourceAsStream propFilename
+    val stream = pickJarBasedOn.getResourceAsStream(propFilename)
     if (stream ne null)
       quietlyDispose(props load stream, stream.close)
 
@@ -51,25 +51,25 @@ private[scala] trait PropertiesTrait {
         catch   { case _: IOException => }
     }
 
-  def propIsSet(name: String)                   = System.getProperty(name) != null
-  def propIsSetTo(name: String, value: String)  = propOrNull(name) == value
-  def propOrElse(name: String, alt: => String)     = Option(System.getProperty(name)).getOrElse(alt)
-  def propOrEmpty(name: String)                 = propOrElse(name, "")
-  def propOrNull(name: String)                  = propOrElse(name, null)
-  def propOrNone(name: String)                  = Option(propOrNull(name))
-  def propOrFalse(name: String)                 = propOrNone(name) exists (x => List("yes", "on", "true") contains x.toLowerCase)
-  def setProp(name: String, value: String)      = System.setProperty(name, value)
-  def clearProp(name: String)                   = System.clearProperty(name)
+  def propIsSet(name: String)                  = System.getProperty(name) != null
+  def propIsSetTo(name: String, value: String) = propOrNull(name) == value
+  def propOrElse(name: String, alt: => String) = Option(System.getProperty(name)).getOrElse(alt)
+  def propOrEmpty(name: String)                = propOrElse(name, "")
+  def propOrNull(name: String)                 = propOrElse(name, null)
+  def propOrNone(name: String)                 = Option(propOrNull(name))
+  def propOrFalse(name: String)                = propOrNone(name).exists(p => List("yes", "on", "true").contains(p.toLowerCase))
+  def setProp(name: String, value: String)     = System.setProperty(name, value)
+  def clearProp(name: String)                  = System.clearProperty(name)
 
-  def envOrElse(name: String, alt: => String)      = Option(System getenv name) getOrElse alt
-  def envOrNone(name: String)                   = Option(System getenv name)
+  def envOrElse(name: String, alt: => String)  = Option(System getenv name).getOrElse(alt)
+  def envOrNone(name: String)                  = Option(System getenv name)
 
-  def envOrSome(name: String, alt: => Option[String])       = envOrNone(name) orElse alt
+  def envOrSome(name: String, alt: => Option[String])       = envOrNone(name).orElse(alt)
 
   // for values based on propFilename, falling back to System properties
   def scalaPropOrElse(name: String, alt: => String): String = scalaPropOrNone(name).getOrElse(alt)
-  def scalaPropOrEmpty(name: String): String             = scalaPropOrElse(name, "")
-  def scalaPropOrNone(name: String): Option[String]      = Option(scalaProps.getProperty(name)).orElse(propOrNone("scala." + name))
+  def scalaPropOrEmpty(name: String): String                = scalaPropOrElse(name, "")
+  def scalaPropOrNone(name: String): Option[String]         = Option(scalaProps.getProperty(name)).orElse(propOrNone(s"scala.$name"))
 
   /** The numeric portion of the runtime Scala version, if this is a final
    *  release.  If for instance the versionString says "version 2.9.0.final",
@@ -103,7 +103,7 @@ private[scala] trait PropertiesTrait {
   /** Either the development or release version if known, otherwise
    *  the empty string.
    */
-  def versionNumberString = scalaPropOrEmpty("version.number")
+  def versionNumberString   = scalaPropOrEmpty("version.number")
 
   /** The version number of the jar this was loaded from plus "version " prefix,
    *  or "version (unknown)" if it cannot be determined.

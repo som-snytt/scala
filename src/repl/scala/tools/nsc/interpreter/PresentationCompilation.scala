@@ -38,15 +38,15 @@ trait PresentationCompilation { self: IMain =>
       val line1 = buf.patch(cursor, Cursor, 0)
       val trees = pc.newUnitParser(line1).parseStats()
       val importer = global.mkImporter(pc)
+      //println(s"pc: [[$line1]], <<${trees.size}>>")
       val request = new Request(line1, trees map (t => importer.importTree(t)), generousImports = true)
       val origUnit = request.mkUnit
       val unit = new pc.CompilationUnit(origUnit.source)
       unit.body = pc.mkImporter(global).importTree(origUnit.body)
-      import pc._
-      val richUnit = new RichCompilationUnit(unit.source)
-      unitOfFile(richUnit.source.file) = richUnit
+      val richUnit = new pc.RichCompilationUnit(unit.source)
+      pc.unitOfFile(richUnit.source.file) = richUnit
       richUnit.body = unit.body
-      enteringTyper(typeCheck(richUnit))
+      pc.enteringTyper(pc.typeCheck(richUnit))
       val inputRange = pc.wrappingPos(trees)
       // too bad dependent method types don't work for constructors
       val result = new PresentationCompileResult(pc, inputRange, cursor, buf) { val unit = richUnit ; override val compiler: pc.type = pc }
