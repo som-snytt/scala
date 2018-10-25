@@ -16,6 +16,7 @@ import interpreter.shell.{ILoop, ShellConfig}
 
 object JarRunner extends CommonRunner {
   def runJar(settings: GenericRunnerSettings, jarPath: String, arguments: Seq[String]): Option[Throwable] = {
+    try {
     val jar       = new io.Jar(jarPath)
     val mainClass = jar.mainClass getOrElse (throw new IllegalArgumentException(s"Cannot find main class for jar: $jarPath"))
     val jarURLs   = util.ClassPath expandManifestPath jarPath
@@ -27,6 +28,9 @@ object JarRunner extends CommonRunner {
     }
 
     runAndCatch(urls, mainClass, arguments)
+  } catch {
+      case e: java.io.IOException => throw new Throwable("Actually threw", e)
+    }
   }
 }
 
@@ -44,6 +48,7 @@ class MainGenericRunner {
   def process(args: Array[String]): Boolean = {
     val command = new GenericRunnerCommand(args.toList, (x: String) => errorFn(x))
     import command.{settings, howToRun, thingToRun, shortUsageMsg}
+    import MainGenericRunner.CommandFailure
 
     // only created for info message
     def sampleCompiler = new Global(settings)
@@ -75,7 +80,7 @@ class MainGenericRunner {
         case AsJar    =>
           JarRunner.runJar(settings, thingToRun, command.arguments)
         case Error =>
-          None
+          Some(CommandFailure)
         case _  =>
           // We start the repl when no arguments are given.
           // If user is agnostic about both -feature and -deprecation, turn them on.
@@ -89,8 +94,9 @@ class MainGenericRunner {
       }
 
       runTarget() match {
-        case e @ Some(ex) => errorFn("", e)  // there must be a useful message of hope to offer here
-        case _            => true
+        case Some(CommandFailure) => false
+        case e @ Some(ex)         => errorFn("", e)
+        case _                    => true
       }
     }
 
@@ -104,5 +110,8 @@ class MainGenericRunner {
 }
 
 object MainGenericRunner extends MainGenericRunner {
+  // control indicating command ran but non-zero exit
+  object CommandFailure extends Throwable("Command failed", null, false, false)
+
   def main(args: Array[String]): Unit = if (!process(args)) System.exit(1)
 }
