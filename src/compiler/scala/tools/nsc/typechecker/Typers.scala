@@ -963,6 +963,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         val qual = gen.stabilize(adapted)
         val t = Select(qual setPos tree.pos.makeTransparent, nme.apply)
         wrapErrors(t, _.typedPos(tree.pos, mode, pt)(t))
+        //typed(Select(qual, nme.apply).setPos(tree.pos.makeTransparent), mode, pt)
       }
       def adaptConstant(value: Constant): Tree = {
         val sym = tree.symbol
