@@ -846,7 +846,7 @@ class MutableSettings(val errorFn: String => Unit)
     val default: String,
     val choicesHelp: List[String])
   extends Setting(name,
-    if (choicesHelp.isEmpty) s"$descr Choices: ${choices.mkString("(", ",", ")")}, default: $default."
+    if (choicesHelp.isEmpty) s"$descr ${choices.map(s => if (s == default) s"[$s]" else s).mkString("(", ",", ")")}"
     else s"$descr Default: `$default`, `help` to list choices.") {
     type T = String
     protected var v: T = default
