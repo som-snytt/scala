@@ -637,9 +637,9 @@ class MutableSettings(val errorFn: String => Unit)
     descr: String,
     val domain: E,
     val default: Option[List[String]]
-  ) extends Setting(name, s"$descr: `_` for all, `$name:help` to list choices.") with Clearable {
+  ) extends Setting(name, descr) with Clearable {
 
-    withHelpSyntax(s"$name:<_,$helpArg,-$helpArg>")
+    withHelpSyntax(s"$name:<${helpArg}s>")
 
     object ChoiceOrVal {
       def unapply(a: domain.Value): Option[(String, String, List[domain.Choice])] = a match {
