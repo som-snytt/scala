@@ -4975,6 +4975,13 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
        * `qual` is already attributed.
        */
       def typedSelect(tree: Tree, qual: Tree, name: Name): Tree = {
+        println(s"TS $name")
+        if (name.toString.endsWith("A")) {
+          println(s"YAY! $name")
+        }
+        if (name.toString.endsWith("C")) {
+          println("Ugh C!")
+        }
         // note: on error, we discard the work we did in type checking tree.qualifier into qual
         // (tree is either Select or SelectFromTypeTree, and qual may be different from tree.qualifier because it has been type checked)
         val qualTp = qual.tpe
@@ -5179,6 +5186,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
        *                  (2) Change imported symbols to selections
        */
       def typedIdent(tree: Tree, name: Name): Tree = {
+        println(s"ID $name")
         // setting to enable unqualified idents in empty package (used by the repl)
         def inEmptyPackage = if (settings.exposeEmptyPackage) lookupInEmpty(name) else NoSymbol
 
@@ -5197,6 +5205,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
           case sym        => LookupSucceeded(EmptyTree, sym)
         }
         import InferErrorGen._
+        val nlres =
         nameLookup match {
           case LookupAmbiguous(msg)         => issue(AmbiguousIdentError(tree, name, msg))
           case LookupInaccessible(sym, msg) => issue(AccessError(tree, sym, context, msg))
@@ -5226,7 +5235,9 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               stabilize(tree2, pre2, mode, pt) modifyType dropIllegalStarTypes
             }) setAttachments tree.attachments
           }
-        }
+          println(s"ID res $nlres")
+          nlres
+      }
 
       def typedIdentOrWildcard(tree: Ident) = {
         val name = tree.name

@@ -17,7 +17,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.control.Exception.ultimately
 import symtab.Flags._
-import PartialFunction.{condOpt => whenever}
+import PartialFunction.condOpt
 import scala.annotation.tailrec
 
 /** An interface to enable higher configurability of diagnostic messages
@@ -555,6 +555,7 @@ trait TypeDiagnostics {
               val td = tp.typeSymbolDirect
               td.isAliasType && (td.isLocalToBlock || td.isPrivate)
             }
+            println(s"At $tp ($isAlias) or (${tp.typeSymbol.isAliasType})")
             // Ignore type references to an enclosing class. A reference to C must be outside C to avoid warning.
             if (isAlias || !currentOwner.hasTransOwner(tp.typeSymbol)) tp match {
               case NoType | NoPrefix    =>
@@ -567,10 +568,11 @@ trait TypeDiagnostics {
               case _                    =>
                 log(s"${if (isAlias) "alias " else ""}$tp referenced from $currentOwner")
                 treeTypes += tp
+                if (isAlias) treeTypes += tp.typeSymbolDirect.tpe
             }
           }
           // e.g. val a = new Foo ; new a.Bar ; don't let a be reported as unused.
-          for (p <- t.tpe.prefix) whenever(p) {
+          for (p <- t.tpe.prefix) condOpt(p) {
             case SingleType(_, sym) => targets += sym
           }
         }
@@ -753,7 +755,7 @@ trait TypeDiagnostics {
     /** Returns Some(msg) if the given tree is untyped apparently due
      *  to a cyclic reference, and None otherwise.
      */
-    def cyclicReferenceMessage(sym: Symbol, tree: Tree) = whenever(tree) {
+    def cyclicReferenceMessage(sym: Symbol, tree: Tree) = condOpt(tree) {
       case ValDef(_, _, TypeTree(), _)       => s"recursive $sym needs type"
       case DefDef(_, _, _, _, TypeTree(), _) => s"${cyclicAdjective(sym)} $sym needs result type"
       case Import(expr, selectors)           =>
