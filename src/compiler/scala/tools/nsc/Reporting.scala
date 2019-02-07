@@ -19,9 +19,7 @@ import scala.reflect.internal.util.StringOps.countElementsAsString
 import nsc.settings.{NoScalaVersion, ScalaVersion}
 
 /** Provides delegates to the reporter doing the actual work.
- * PerRunReporting implements per-Run stateful info tracking and reporting
- *
- * TODO: make reporting configurable
+ *  PerRunReporting implements per-Run stateful info tracking and reporting.
  */
 trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions with CompilationUnits with scala.reflect.internal.Symbols =>
   def settings: Settings
@@ -32,23 +30,35 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
 
   object policy extends Enumeration {
     val Silent, Info, Warn, Error = Value
-    case class Philter(pkg: String, esc: Value, isInfractor: Boolean, label: String, version: ScalaVersion) {
+    case class Philter(pkg: String, esc: Value, isInfractor: Boolean, label: String, version: ScalaVersion, matcher: ScalaVersion => Boolean) {
       def matches(sym: Symbol, since: String, infractor: String): Boolean = {
         val v = ScalaVersion(since)
-        version < v
+        matcher(v)
       }
     }
-    val NoPhilter = Philter("", Silent, false, "", NoScalaVersion)
+    val NoPhilter = Philter("", Silent, false, "", NoScalaVersion, _ => false)
     val config: List[Philter] = {
-      def parse(s: String) = {
-        if (s.startsWith("since<")) {
-          val v = ScalaVersion(s.substring("since<".length), x => reporter.error(NoPosition, s"bad version '$x'"))
-          Philter("", Warn, false, "", v)
-        } else {
-          reporter.error(NoPosition, s"bad policy '$s'")
-          NoPhilter
+      val regex = raw"([+-]?)(?:\s*([\w.]*))?(?:\s*since([<>=])([\w.-]+))?".r
+      def parse(s: String) =
+        s match {
+          case regex(esc,pkg,op,vers) =>
+            val infr = pkg.startsWith("'")
+            val name = if (infr) pkg.substring(1) else pkg
+            val warn = esc match { case "+" => Error case "-" => Info case "--" => Silent case _ => Warn }
+            def versionOf(vstr: String) =
+              ScalaVersion(vstr, x => reporter.error(NoPosition, s"bad version '$x'"))
+            val (label, version) =
+              if (vers.contains(' ')) {
+                val i = vers.lastIndexOf(' ')
+                val (a, b) = vers.splitAt(i)
+                (a.trim, versionOf(b.trim))
+              } else
+                ("", versionOf(vers))
+              Philter(name, warn, infr, label, version, op match { case "<" => x => version < x case ">" => x => version > x case _ => x => version == x })
+          case _ =>
+            reporter.error(NoPosition, s"bad policy '$s'")
+            NoPhilter
         }
-      }
       settings.deprecationPolicy.value.map(parse)
     }
     def apply(pos: Position, sym: Symbol, msg: String, since: String, infractor: String): Value = {
