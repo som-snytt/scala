@@ -16,6 +16,7 @@ package nsc
 
 import scala.collection.mutable
 import scala.reflect.internal.util.StringOps.countElementsAsString
+import nsc.settings.{NoScalaVersion, ScalaVersion}
 
 /** Provides delegates to the reporter doing the actual work.
  * PerRunReporting implements per-Run stateful info tracking and reporting
@@ -28,6 +29,34 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
   // not deprecated yet, but a method called "error" imported into
   // nearly every trait really must go.  For now using globalError.
   def error(msg: String) = globalError(msg)
+
+  object policy extends Enumeration {
+    val Silent, Info, Warn, Error = Value
+    case class Philter(pkg: String, esc: Value, isInfractor: Boolean, label: String, version: ScalaVersion) {
+      def matches(sym: Symbol, since: String, infractor: String): Boolean = {
+        val v = ScalaVersion(since)
+        version < v
+      }
+    }
+    val NoPhilter = Philter("", Silent, false, "", NoScalaVersion)
+    val config: List[Philter] = {
+      def parse(s: String) = {
+        if (s.startsWith("since<")) {
+          val v = ScalaVersion(s.substring("since<".length), x => reporter.error(NoPosition, s"bad version '$x'"))
+          Philter("", Warn, false, "", v)
+        } else {
+          reporter.error(NoPosition, s"bad policy '$s'")
+          NoPhilter
+        }
+      }
+      settings.deprecationPolicy.value.map(parse)
+    }
+    def apply(pos: Position, sym: Symbol, msg: String, since: String, infractor: String): Value = {
+      println(s"checking ${sym.fullName}")
+      if (sym.fullName == "scala.tools.nsc.reporters.Reporter") Silent
+      else config.find(_.matches(sym, since, infractor)).map(_.esc).getOrElse(Warn)
+    }
+  }
 
   // a new instance of this class is created for every Run (access the current instance via `currentRun.reporting`)
   protected def PerRunReporting = new PerRunReporting
@@ -76,7 +105,7 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
     private val _allConditionalWarnings = List(_deprecationWarnings, _uncheckedWarnings, _featureWarnings, _inlinerWarnings)
 
     // TODO: remove in favor of the overload that takes a Symbol, give that argument a default (NoSymbol)
-    def deprecationWarning(pos: Position, msg: String, since: String): Unit = _deprecationWarnings.warn(pos, msg, since)
+    def deprecationWarning(pos: Position, msg: String, since: String): Unit = deprecationWarning(pos, NoSymbol, msg, since)
     def uncheckedWarning(pos: Position, msg: String): Unit   = _uncheckedWarnings.warn(pos, msg)
     def featureWarning(pos: Position, msg: String): Unit     = _featureWarnings.warn(pos, msg)
     def inlinerWarning(pos: Position, msg: String): Unit     = _inlinerWarnings.warn(pos, msg)
@@ -88,8 +117,16 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
 
     def allConditionalWarnings = _allConditionalWarnings flatMap (_.warnings)
 
-    // behold! the symbol that caused the deprecation warning (may not be deprecated itself)
-    def deprecationWarning(pos: Position, sym: Symbol, msg: String, since: String): Unit = _deprecationWarnings.warn(pos, msg, since)
+    def deprecationWarning(pos: Position, sym: Symbol, msg: String, since: String): Unit = {
+      println(s"Check $sym")
+      val infractor = ""
+      policy(pos, sym, msg, since, infractor) match {
+        case policy.Silent =>
+        case policy.Info   => reporter.echo(pos, s"msg (since $since)")
+        case policy.Warn   => _deprecationWarnings.warn(pos, msg, since)
+        case policy.Error  => reporter.error(pos, s"msg (since $since)")
+      }
+    }
     def deprecationWarning(pos: Position, sym: Symbol): Unit = {
       val version = sym.deprecationVersion.getOrElse("")
       val since   = if (version.isEmpty) version else s" (since $version)"
