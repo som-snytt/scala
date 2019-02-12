@@ -2560,6 +2560,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         }
 
         // Remove ValDef for right-associative by-value operator desugaring which has been inlined into expr1
+        /*
         val statsTyped2 = statsTyped match {
           case (vd: ValDef) :: Nil if inlinedRightAssocValDefs.remove(vd.symbol) => Nil
           case _ => statsTyped
@@ -2567,6 +2568,20 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
 
         treeCopy.Block(block, statsTyped2, expr1)
           .setType(if (treeInfo.isExprSafeToInline(block)) expr1.tpe else expr1.tpe.deconst)
+        */
+        val block2 = statsTyped match {
+          case (vd: ValDef) :: Nil if inlinedRightAssocValDefs.remove(vd.symbol) =>
+            println(s"expr1 is ${showRaw(expr1)} of type ${expr1.tpe}")
+            expr1.setType(NoType)
+            //val expr2 = typed(expr1, mode &~ (FUNmode | QUALmode), pt)
+            val Apply(fn, as) = expr1
+            val expr2 = typed(treeCopy.Apply(expr1, fn, as), mode &~ (FUNmode | QUALmode), pt)
+            println(s"expr2 is ${showRaw(expr2)} of type ${expr2.tpe}")
+            treeCopy.Block(block, Nil, expr2)
+          case stats2 => treeCopy.Block(block, stats2, expr1)
+        }
+        block2.setType(if (treeInfo.isExprSafeToInline(block)) block2.expr.tpe else block2.expr.tpe.deconst)
+
       } finally {
         // enable escaping privates checking from the outside and recycle
         // transient flag
@@ -3736,14 +3751,17 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
                         rightAssocValDefs.remove(id.symbol)
                       case _ =>
                     }
-
                   case List(id: Ident) if rightAssocValDefs.contains(id.symbol) =>
+                    def inlineArg(): Unit = {
+                      inlinedRightAssocValDefs += id.symbol
+                      val rhs = rightAssocValDefs.remove(id.symbol).get
+                      args2 = rhs.changeOwner(id.symbol -> context.owner) :: Nil
+                      pos2 = wrappingPos(tree :: rhs :: Nil)
+                    }
+                    println(s"is ${id.symbol} safe? ${treeInfo.isExprSafeToInline(rightAssocValDefs(id.symbol))} for ${showRaw(rightAssocValDefs(id.symbol))}")
                     mt.params match {
-                      case List(p) if p.isByNameParam =>
-                        inlinedRightAssocValDefs += id.symbol
-                        val rhs = rightAssocValDefs.remove(id.symbol).get
-                        args2 = rhs.changeOwner(id.symbol -> context.owner) :: Nil
-                        pos2 = wrappingPos(tree :: rhs :: Nil)
+                      case List(p) if p.isByNameParam => inlineArg()
+                      case List(p) if treeInfo.isExprSafeToInline(rightAssocValDefs(id.symbol)) => inlineArg()
                       case _ =>
                     }
                   case _ =>
@@ -4926,7 +4944,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         }
       }
 
-      def typedApply(tree: Apply) = tree match {
+      def typedApply(tree: Apply): Tree = tree match {
         case Apply(Block(stats, expr), args) =>
           typed1(atPos(tree.pos)(Block(stats, Apply(expr, args) setPos tree.pos.makeTransparent)), mode, pt)
         case Apply(fun, args) =>
@@ -4950,6 +4968,29 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               // The enclosing context may be case c @ C(_) => or val c @ C(_) = v.
               tree1 modifyType (_.finalResultType)
               tree1
+            case tree1 @ Apply(fun1, arg1 :: Nil) if tree.hasAttachment[RightAssociative.type] =>
+              println(s"RASSOC ${showRaw(tree1)}")
+              fun1.tpe match {
+                // fix evaluation order of `x op_: y` if necessary to `{ val tmp = x ; y.op_:(tmp) }`
+                case MethodType(p :: Nil, _) if !p.isByNameParam && !treeInfo.isExprSafeToInline(arg1) =>
+                  import symtab.Flags._
+                  val tmp = freshTermName(nme.RIGHT_ASSOC_OP_PREFIX)
+                  val valSym = context.owner.newValue(tmp, arg1.pos.focus, FINAL | SYNTHETIC | ARTIFACT)
+                  val rhs = arg1.changeOwner(context.owner -> valSym)
+                  valSym.setInfo(rhs.tpe)
+                  val liftedArg = atPos(arg1.pos) { ValDef(valSym, rhs) }
+                  val t =
+                  Block(
+                    liftedArg :: Nil,
+                    treeCopy.Apply(tree1, fun1, List(Ident(tmp) setPos arg1.pos.focus)).clearType()
+                  )
+                  println(s"Fixed: ${showRaw(t)}")
+                  println(s"is $tmp in scope? ${context.isNameInScope(tmp)}")
+                  val t2 = typed(t, mode, pt)
+                  println(s"Typed Fixed: ${showRaw(t2)}")
+                  t2
+                case _ => tree1
+              }
             case tree1                                                               => tree1
           }
       }

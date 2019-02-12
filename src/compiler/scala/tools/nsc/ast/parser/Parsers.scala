@@ -867,13 +867,14 @@ self =>
         }
       }
       def mkNamed(args: List[Tree]) = if (isExpr) args map treeInfo.assignmentToMaybeNamedArg else args
-      val arguments = right match {
+      def arguments(arg: Tree) = arg match {
         case Parens(Nil)  => Literal(Constant(())) :: Nil
         case Parens(args) => mkNamed(args)
-        case _            => right :: Nil
+        case _            => arg :: Nil
       }
       if (isExpr) {
         if (rightAssoc) {
+          /*
           import symtab.Flags._
           val x = freshTermName(nme.RIGHT_ASSOC_OP_PREFIX)
           val liftedArg = atPos(left.pos) {
@@ -882,11 +883,16 @@ self =>
           Block(
             liftedArg :: Nil,
             Apply(mkSelection(right), List(Ident(x) setPos left.pos.focus)))
+          */
+         val t = 
+          Apply(mkSelection(right), arguments(left)).updateAttachment(RightAssociative)
+         println(s"Parsed ${showRaw(t)}")
+         t
         } else {
-          Apply(mkSelection(left), arguments)
+          Apply(mkSelection(left), arguments(right))
         }
       } else {
-        Apply(Ident(op.encode), stripParens(left) :: arguments)
+        Apply(Ident(op.encode), stripParens(left) :: arguments(right))
       }
     }
 
