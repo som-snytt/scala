@@ -16,7 +16,7 @@ package nsc
 
 import java.io.{FileNotFoundException, IOException}
 import java.net.URL
-import java.nio.charset.{Charset, CharsetDecoder, IllegalCharsetNameException, UnsupportedCharsetException}
+import java.nio.charset.{Charset, CharsetDecoder, IllegalCharsetNameException, StandardCharsets, UnsupportedCharsetException}
 
 import scala.collection.{immutable, mutable}
 import io.{AbstractFile, SourceReader}
@@ -1449,20 +1449,19 @@ class Global(var currentSettings: Settings, reporter0: LegacyReporter)
     /** Caching member symbols that are def-s in Definitions because they might change from Run to Run. */
     val runDefinitions: definitions.RunDefinitions = new definitions.RunDefinitions
 
-    private def printArgs(sources: List[SourceFile]): Unit = {
-      if (settings.printArgs.isSetByUser) {
+    private def printArgs(sources: List[SourceFile]): Unit =
+      settings.printArgs.valueSetByUser foreach { value =>
         val argsFile = (settings.recreateArgs ::: sources.map(_.file.absolute.toString())).mkString("", "\n", "\n")
-        settings.printArgs.value match {
+        value match {
           case "-" =>
             reporter.echo(argsFile)
           case pathString =>
             import java.nio.file._
             val path = Paths.get(pathString)
-            Files.write(path, argsFile.getBytes(Charset.forName("UTF-8")))
-            reporter.echo("Compiler arguments written to: " + path)
+            Files.write(path, argsFile.getBytes(StandardCharsets.UTF_8))
+            reporter.echo(s"Compiler arguments written to: $path")
         }
       }
-    }
 
     /** Compile list of source files,
      *  unless there is a problem already,
