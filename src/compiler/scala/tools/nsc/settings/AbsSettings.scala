@@ -113,7 +113,7 @@ trait AbsSettings extends scala.reflect.internal.settings.AbsSettings {
      *  unmodified on failure, and Nil on success.
      */
     protected[nsc] def tryToSetColon(args: List[String]): Option[ResultOfTryToSet] =
-      errorAndValue("'%s' does not accept multiple arguments" format name, None)
+      errorAndValue(s"'$name' does not accept multiple arguments", None)
 
     /** Attempt to set from a properties file style property value.
      *  Currently used by Eclipse SDT only.

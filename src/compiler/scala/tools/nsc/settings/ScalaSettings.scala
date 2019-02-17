@@ -117,11 +117,6 @@ trait ScalaSettings extends AbsScalaSettings
                                                 elidable.MINIMUM, None, elidable.byName get _)
   val noForwarders       = BooleanSetting      ("-Xno-forwarders", "Do not generate static forwarders in mirror classes.")
   val genPhaseGraph      = StringSetting       ("-Xgenerate-phase-graph", "file", "Generate the phase graphs (outputs .dot files) to fileX.dot.", "")
-  val XlogImplicits      = BooleanSetting      ("-Xlog-implicits", "Show more detail on why some implicits are not applicable.")
-  val logImplicitConv    = BooleanSetting      ("-Xlog-implicit-conversions", "Print a message whenever an implicit conversion is inserted.")
-  val logReflectiveCalls = BooleanSetting      ("-Xlog-reflective-calls", "Print a message when a reflective method call is generated")
-  val logFreeTerms       = BooleanSetting      ("-Xlog-free-terms", "Print a message when reification creates a free term.")
-  val logFreeTypes       = BooleanSetting      ("-Xlog-free-types", "Print a message when reification resorts to generating a free type.")
   val maxerrs            = IntSetting          ("-Xmaxerrs", "Maximum errors to print", 100, None, _ => None)
   val maxwarns           = IntSetting          ("-Xmaxwarns", "Maximum warnings to print", 100, None, _ => None)
   val Xmigration         = ScalaVersionSetting ("-Xmigration", "version", "Warn about constructs whose behavior may have changed since version.", initial = NoScalaVersion, default = Some(AnyScalaVersion))
@@ -133,17 +128,10 @@ trait ScalaSettings extends AbsScalaSettings
   val showPlugins        = BooleanSetting      ("-Xplugin-list", "Print a synopsis of loaded plugins.")
   val require            = MultiStringSetting  ("-Xplugin-require", "plugin", "Abort if a named plugin is not loaded.")
   val pluginsDir         = StringSetting       ("-Xpluginsdir", "path", "Path to search for plugin archives.", Defaults.scalaPluginPath)
-  val Xprint             = PhasesSetting       ("-Xprint", "Print out program after")
-  val Xprintpos          = BooleanSetting      ("-Xprint-pos", "Print tree positions, as offsets.")
-  val printtypes         = BooleanSetting      ("-Xprint-types", "Print tree types (debugging option).")
-  val printArgs          = StringSetting       ("-Xprint-args", "file", "Print all compiler arguments to the specified location. Use - to echo to the reporter.", "-")
   val prompt             = BooleanSetting      ("-Xprompt", "Display a prompt after each error (debugging option).")
   val resident           = BooleanSetting      ("-Xresident", "Compiler stays resident: read source filenames from standard input.")
   val script             = StringSetting       ("-Xscript", "object", "Treat the source file as a script and wrap it in a main method.", "")
   val mainClass          = StringSetting       ("-Xmain-class", "path", "Class for manifest's Main-Class entry (only useful with -d <jar>)", "")
-  val Xshowcls           = StringSetting       ("-Xshow-class", "class", "Show internal representation of class.", "")
-  val Xshowobj           = StringSetting       ("-Xshow-object", "object", "Show internal representation of object.", "")
-  val showPhases         = BooleanSetting      ("-Xshow-phases", "Print a synopsis of compiler phases.")
   val sourceReader       = StringSetting       ("-Xsource-reader", "classname", "Specify a custom method for reading source files.", "")
   val reporter           = StringSetting       ("-Xreporter", "classname", "Specify a custom reporter for compiler messages.", "scala.tools.nsc.reporters.ConsoleReporter")
   val source             = ScalaVersionSetting ("-Xsource", "version", "Treat compiler input as Scala source for the specified version, see scala/bug#8126.", initial = ScalaVersion("2.13"))
@@ -193,7 +181,6 @@ trait ScalaSettings extends AbsScalaSettings
   val Yhelp           = BooleanSetting    ("-Y", "Print a synopsis of private options.")
   val breakCycles     = BooleanSetting    ("-Ybreak-cycles", "Attempt to break cycles encountered during typing")
   val check           = PhasesSetting     ("-Ycheck", "Check the tree at the end of")
-  val Yshow           = PhasesSetting     ("-Yshow", "(Requires -Xshow-class or -Xshow-object) Show after")
   val Ycompacttrees   = BooleanSetting    ("-Ycompact-trees", "Use compact tree printer when displaying trees.")
   val noCompletion    = BooleanSetting    ("-Yno-completion", "Disable tab-completion in the REPL.")
   val termConflict    = ChoiceSetting     ("-Yresolve-term-conflict", "strategy", "Resolve term conflicts.", List("package", "object", "error"), "error")
@@ -244,8 +231,6 @@ trait ScalaSettings extends AbsScalaSettings
   val XshowtreesStringified
                       = BooleanSetting    ("-Yshow-trees-stringified", "(Requires -Xprint:) Print stringifications along with detailed ASTs.").internalOnly()
 
-  val Yshowsymkinds   = BooleanSetting    ("-Yshow-symkinds", "Print abbreviated symbol kinds next to symbol names.")
-  val Yshowsymowners  = BooleanSetting    ("-Yshow-symowners", "Print owner identifiers next to symbol names.")
   val skip            = PhasesSetting     ("-Yskip", "Skip")
   val Ygenasmp        = StringSetting     ("-Ygen-asmp",  "dir", "Generate a parallel output directory of .asmp files (ie ASM Textifier output).", "")
   val Ydumpclasses    = StringSetting     ("-Ydump-classes", "dir", "Dump the generated bytecode to .class files (useful for reflective compilation that utilizes in-memory classloaders).", "")
@@ -253,7 +238,6 @@ trait ScalaSettings extends AbsScalaSettings
   val stopBefore      = PhasesSetting     ("-Ystop-before", "Stop before")
   val Yrangepos       = BooleanSetting    ("-Yrangepos", "Use range positions for syntax trees.")
   val Yvalidatepos    = PhasesSetting     ("-Yvalidate-pos", s"Validate positions after the given phases (implies ${Yrangepos.name})") withPostSetHook (_ => Yrangepos.value = true)
-  val Ymemberpos      = StringSetting     ("-Yshow-member-pos", "output style", s"Show start and end positions of members (implies ${Yrangepos.name})", "") withPostSetHook (_ => Yrangepos.value = true)
   val Yreifycopypaste = BooleanSetting    ("-Yreify-copypaste", "Dump the reified trees in copypasteable representation.")
   val Ymacroexpand    = ChoiceSetting     ("-Ymacro-expand", "policy", "Control expansion of macros, useful for scaladoc and presentation compiler.", List(MacroExpand.Normal, MacroExpand.None, MacroExpand.Discard), MacroExpand.Normal)
   val YmacroFresh     = BooleanSetting    ("-Ymacro-global-fresh-names", "Should fresh names in macros be unique across all compilation units")
@@ -263,7 +247,7 @@ trait ScalaSettings extends AbsScalaSettings
   @deprecated("Unused setting will be removed", since="2.13")
   val Yreplsync       = new BooleanSetting    ("-Yrepl-sync", "Legacy setting for sbt compatibility, unused.").internalOnly()
   val Yscriptrunner   = StringSetting     ("-Yscriptrunner", "classname", "Specify a scala.tools.nsc.ScriptRunner (default, resident, shutdown, or a class name).", "default")
-  val YdisableFlatCpCaching  = BooleanSetting    ("-YdisableFlatCpCaching", "Do not cache flat classpath representation of classpath elements from jars across compiler instances.")
+  val YdisableFlatCpCaching  = BooleanSetting    ("-Yno-flat-classpath-cache", "Do not cache flat classpath representation of classpath elements from jars across compiler instances.") withAbbreviation "-YdisableFlatCpCaching"
   val YcachePluginClassLoader  = CachePolicy.setting("plugin", "compiler plugins")
   val YcacheMacroClassLoader   = CachePolicy.setting("macro", "macros")
 
@@ -436,15 +420,6 @@ trait ScalaSettings extends AbsScalaSettings
   def optWarningNoInlineMissingBytecode            = optWarnings.contains(optWarningsChoices.noInlineMissingBytecode)
   def optWarningNoInlineMissingScalaInlineInfoAttr = optWarnings.contains(optWarningsChoices.noInlineMissingScalaInlineInfoAttr)
 
-  val YoptTrace = StringSetting("-Yopt-trace", "package/Class.method", "Trace the optimizer progress for methods; `_` to print all, prefix match to select.", "")
-
-  val YoptLogInline = StringSetting("-Yopt-log-inline", "package/Class.method", "Print a summary of inliner activity; `_` to print all, prefix match to select.", "")
-
-  val Ystatistics = PhasesSetting("-Ystatistics", "Print compiler statistics for specific phases", "parser,typer,patmat,erasure,cleanup,jvm").withPostSetHook(s => YstatisticsEnabled.value = s.value.nonEmpty)
-  val YstatisticsEnabled = BooleanSetting("-Ystatistics-enabled", "Internal setting, indicating that statistics are enabled for some phase.").internalOnly()
-
-  val YhotStatisticsEnabled = BooleanSetting("-Yhot-statistics", s"Enable `${Ystatistics.name}` to also print hot statistics.")
-
   val YprofileEnabled = BooleanSetting("-Yprofile-enabled", "Enable profiling.")
   val YprofileDestination = StringSetting("-Yprofile-destination", "file", "Profiling output - specify a file or `-` for console.", "").
     withPostSetHook( _ => YprofileEnabled.value = true )
@@ -471,12 +446,55 @@ trait ScalaSettings extends AbsScalaSettings
   val Ylogcp             = BooleanSetting("-Vclasspath", "Output information about what classpath is being applied.") withAbbreviation "-Ylog-classpath"
   val YmacrodebugLite    = BooleanSetting("-Vmacro-lite", "Trace macro activities with less output.") withAbbreviation "-Ymacro-debug-lite"
   val YmacrodebugVerbose = BooleanSetting("-Vmacro", "Trace macro activities: compilation, generation of synthetics, classloading, expansion, exceptions.") withAbbreviation "-Ymacro-debug-verbose"
+  val YoptTrace = StringSetting("-Vopt", "package/Class.method", "Trace the optimizer progress for methods; `_` to print all, prefix match to select.", "")
+    .withAbbreviation("-Yopt-trace")
+  val YoptLogInline = StringSetting("-Vinline", "package/Class.method", "Print a summary of inliner activity; `_` to print all, prefix match to select.", "")
+    .withAbbreviation("-Yopt-log-inline")
   val Ypatmatdebug       = BooleanSetting("-Vpatmat", "Trace pattern matching translation.") withAbbreviation "-Ypatmat-debug"
+  val showPhases         = BooleanSetting("-Vphases", "Print a synopsis of compiler phases.")
+    .withAbbreviation("-Xshow-phases")
   val Yposdebug          = BooleanSetting("-Vpos", "Trace position validation.") withAbbreviation "-Ypos-debug"
+  val Xprint             = PhasesSetting("-Vprint", "Print out program after")
+    .withAbbreviation("-Xprint")
+  val Xprintpos          = BooleanSetting("-Vprint-pos", "Print tree positions, as offsets.")
+    .withAbbreviation("-Xprint-pos")
+  val printtypes         = BooleanSetting("-Vprint-types", "Print tree types (debugging option).")
+    .withAbbreviation("-Xprint-types")
+  val printArgs          = StringSetting("-Vprint-args", "file", "Print all compiler arguments to the specified location. Use - to echo to the reporter.", "-")
+    .withAbbreviation("-Xprint-args")
   val Yquasiquotedebug   = BooleanSetting("-Vquasiquote", "Trace quasiquotations.") withAbbreviation "-Yquasiquote-debug"
   val Yreifydebug        = BooleanSetting("-Vreify", "Trace reification.") withAbbreviation "-Yreify-debug"
+  val Yshow           = PhasesSetting     ("-Vshow", "(Requires -Xshow-class or -Xshow-object) Show after")
+    .withAbbreviation("-Yshow")
+  val Xshowcls           = StringSetting("-Vshow-class", "class", "Show internal representation of class.", "")
+    .withAbbreviation("-Xshow-class")
+  val Xshowobj           = StringSetting("-Vshow-object", "object", "Show internal representation of object.", "")
+    .withAbbreviation("-Xshow-object")
+  val Ymemberpos      = StringSetting("-Vshow-member-pos", "output style", s"Show start and end positions of members (implies ${Yrangepos.name})", "")
+    .withPostSetHook(_ => Yrangepos.value = true)
+    .withAbbreviation("-Yshow-member-pos")
+  val Yshowsymkinds   = BooleanSetting    ("-Vshow-symkinds", "Print abbreviated symbol kinds next to symbol names.")
+    .withAbbreviation("-Yshow-symkinds")
+  val Yshowsymowners  = BooleanSetting    ("-Vshow-symowners", "Print owner identifiers next to symbol names.")
+    .withAbbreviation("-Yshow-symowners")
+  val Ystatistics = PhasesSetting("-Vstatistics", "Print compiler statistics for specific phases", "parser,typer,patmat,erasure,cleanup,jvm")
+    .withPostSetHook(s => YstatisticsEnabled.value = s.value.nonEmpty)
+    .withAbbreviation("-Ystatistics")
+  val YstatisticsEnabled = BooleanSetting("-Ystatistics-enabled", "Internal setting, indicating that statistics are enabled for some phase.").internalOnly()
+  val YhotStatisticsEnabled = BooleanSetting("-Vhot-statistics", s"Enable `${Ystatistics.name}` to also print hot statistics.")
+    .withAbbreviation("-Yhot-statistics")
   val Yshowsyms       = BooleanSetting("-Vsymbols", "Print the AST symbol hierarchy after each phase.") withAbbreviation "-Yshow-syms"
   val Ytyperdebug        = BooleanSetting("-Vtyper", "Trace type assignments.") withAbbreviation "-Ytyper-debug"
+  val XlogImplicits      = BooleanSetting("-Vimplicits", "Show more detail on why some implicits are not applicable.")
+    .withAbbreviation("-Xlog-implicits")
+  val logImplicitConv    = BooleanSetting("-Vimplicit-conversions", "Print a message whenever an implicit conversion is inserted.")
+    .withAbbreviation("-Xlog-implicit-conversions")
+  val logReflectiveCalls = BooleanSetting("-Vreflective-calls", "Print a message when a reflective method call is generated")
+    .withAbbreviation("-Xlog-reflective-calls")
+  val logFreeTerms       = BooleanSetting("-Vfree-terms", "Print a message when reification creates a free term.")
+    .withAbbreviation("-Xlog-free-terms")
+  val logFreeTypes       = BooleanSetting("-Vfree-types", "Print a message when reification resorts to generating a free type.")
+    .withAbbreviation("-Xlog-free-types")
 
   /** Groups of Settings.
    */

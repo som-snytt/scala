@@ -146,49 +146,35 @@ class MutableSettings(val errorFn: String => Unit)
       if (s endsWith ":") {
         clearIfExists(s.init)
       } else {
-        for {
-          (p, args) <- StringOps.splitWhere(s, _ == ':', doDropIndex = true)
-          rest      <- tryToSetIfExists(p, (args split ",").toList, (s: Setting) => s.tryToSetColon _)
-        } yield rest
+        StringOps.splitWhere(s, _ == ':', doDropIndex = true).flatMap {
+          case (p, args) =>
+            tryToSetIfExists(p, (args split ",").toList, (s: Setting) => s.tryToSetColon(_))
+        }
       }
 
     // if arg is of form -Xfoo or -Xfoo bar (name = "-Xfoo")
     def parseNormalArg(p: String, args: List[String]): Option[List[String]] =
-      tryToSetIfExists(p, args, (s: Setting) => s.tryToSet _)
+      tryToSetIfExists(p, args, (s: Setting) => s.tryToSet(_))
 
     args match {
       case Nil          => Nil
+      case "-" :: rest  => errorFn("'-' is not a valid argument.") ; args
+      case arg :: rest if !arg.startsWith("-") => errorFn(s"Argument '$arg' does not start with '-'.") ; args
       case arg :: rest  =>
-        if (!arg.startsWith("-")) {
-          errorFn("Argument '" + arg + "' does not start with '-'.")
-          args
+        // we dispatch differently based on the appearance of p:
+        // 1) If it matches a prefix setting it is sent there directly.
+        // 2) If it has a : it is presumed to be -Xfoo:bar,baz
+        // 3) Otherwise, the whole string should be a command name
+        //
+        // Internally we use Option[List[String]] to discover error,
+        // but the outside expects our arguments back unchanged on failure
+        val prefix = prefixSettings.find(_ respondsTo arg)
+        prefix.map { setting => setting.tryToSet(args); rest }
+        .orElse {
+          if (arg contains ":") parseColonArg(arg).map(_ => rest)
+          else parseNormalArg(arg, rest)
         }
-        else if (arg == "-") {
-          errorFn("'-' is not a valid argument.")
-          args
-        }
-        else {
-          // we dispatch differently based on the appearance of p:
-          // 1) If it matches a prefix setting it is sent there directly.
-          // 2) If it has a : it is presumed to be -Xfoo:bar,baz
-          // 3) Otherwise, the whole string should be a command name
-          //
-          // Internally we use Option[List[String]] to discover error,
-          // but the outside expects our arguments back unchanged on failure
-          val prefix = prefixSettings find (_ respondsTo arg)
-          if (prefix.isDefined) {
-            prefix.get tryToSet args
-            rest
-          }
-          else if (arg contains ":") parseColonArg(arg) match {
-            case Some(_)  => rest
-            case None     => args
-          }
-          else parseNormalArg(arg, rest) match {
-            case Some(xs) => xs
-            case None     => args
-          }
-        }
+        .getOrElse(args)
     }
   }
 
@@ -215,9 +201,10 @@ class MutableSettings(val errorFn: String => Unit)
   /** Retrieves the contents of resource "${id}.class.path" from `loader`
   * (wrapped in Some) or None if the resource does not exist.*/
   private def getClasspath(id: String, loader: ClassLoader): Option[String] =
-    Option(loader).flatMap(ld => Option(ld.getResource(id + ".class.path"))).map { cp =>
-       Source.fromURL(cp).mkString
-    }
+    for {
+      ld <- Option(loader)
+      r  <- Option(ld.getResource(s"$id.class.path"))
+    } yield Source.fromURL(r).mkString
 
   // a wrapper for all Setting creators to keep our list up to date
   private def add[T <: Setting](s: T): T = {

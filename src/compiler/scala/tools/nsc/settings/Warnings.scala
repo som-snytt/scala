@@ -145,7 +145,7 @@ trait Warnings {
   val lint = MultiChoiceSetting(
     name    = "-Xlint",
     helpArg = "warning",
-    descr   = "Enable or disable specific warnings",
+    descr   = "Enable recommended warnings",
     domain  = LintWarnings,
     default = Some(List("_"))
   ).withPostSetHook { s =>
