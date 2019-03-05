@@ -1869,6 +1869,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
 
     def typedClassDef(cdef: ClassDef): Tree = {
       val clazz = cdef.symbol
+println(s"ClassDef $clazz")
       currentRun.profiler.beforeTypedImplDef(clazz)
       try {
         val typedMods = typedModifiers(cdef.mods)
@@ -3924,6 +3925,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       if (fun0.isErroneous)
         return finish(ErroneousAnnotation)
       val typedFun0 = typed(fun0, mode.forFunMode)
+println(s"typedFun0 ${showRaw(typedFun0)} is ${typedFun0.tpe}")
       val typedFunPart = (
         // If there are dummy type arguments in typeFun part, it suggests we
         // must type the actual constructor call, not only the select. The value
@@ -3936,6 +3938,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       val treeInfo.Applied(typedFun @ Select(New(annTpt), _), _, _) = typedFunPart
       val annType = annTpt.tpe // for a polymorphic annotation class, this type will have unbound type params (see context.undetparams)
       val annTypeSym = annType.typeSymbol
+println(s"annTpt ${showRaw(annTpt)} is ${annType} or ${annTypeSym}")
       val isJava = annType != null && annTypeSym.isJavaDefined
 
       finish(
