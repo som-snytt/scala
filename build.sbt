@@ -509,6 +509,8 @@ lazy val scaladoc = configureAsSubproject(project)
 lazy val scalap = configureAsSubproject(project)
   .settings(
     description := "Scala Bytecode Parser",
+    scalacOptions in Compile += "-Xlint",
+    scalacOptions in Compile += "-deprecation",
     // Include decoder.properties
     includeFilter in unmanagedResources in Compile := "*.properties",
     fixPom(

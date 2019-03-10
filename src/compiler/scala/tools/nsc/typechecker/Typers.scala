@@ -4961,9 +4961,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       def checkInfix(original: Tree, fun: Tree, result: Tree): Unit =
         if (settings.warnInfix && original.hasAttachment[InfixApplicationAttachment.type]
             && fun.hasExistingSymbol && !fun.symbol.hasAnnotation(InfixAnnotationClass)
-            && Character.isUnicodeIdentifierStart(fun.symbol.decodedName.head))
+            && Character.isUnicodeIdentifierStart(fun.symbol.decodedName.head)) {
+          println(s"original ${show(original)} and result ${show(result)}")
           context.warning(original.pos, s"${fun.symbol} is not intended to be used as an infix operator")
 
+        }
       def convertToAssignment(fun: Tree, qual: Tree, name: Name, args: List[Tree]): Tree = {
         val prefix = name.toTermName stripSuffix nme.EQL
         def mkAssign(vble: Tree): Tree =

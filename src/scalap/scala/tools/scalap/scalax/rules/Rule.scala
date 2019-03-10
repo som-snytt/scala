@@ -14,6 +14,8 @@ package scala.tools.scalap
 package scalax
 package rules
 
+import annotation.infix
+
 /** A Rule is a function from some input to a Result.  The result may be:
   * <ul>
   * <li>Success, with a value of some type and an output that may serve as the input to subsequent rules.</li>
@@ -29,7 +31,7 @@ trait Rule[-In, +Out, +A, +X] extends (In => Result[Out, A, X]) {
   val factory: Rules
   import factory._
 
-  def as(name: String) = ruleWithName(name, this)
+  @infix def as(name: String) = ruleWithName(name, this)
 
   def flatMap[Out2, B, X2 >: X](fa2ruleb: A => Out => Result[Out2, B, X2]) = mapResult {
       case Success(out, a) => fa2ruleb(a)(out)

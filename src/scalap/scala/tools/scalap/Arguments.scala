@@ -153,19 +153,19 @@ class Arguments {
 
   def contains(option: String): Boolean = options(option)
 
-  def getArgument(option: String): Option[String] = arguments get option
+  def getArgument(option: String): Option[String] = arguments.get(option)
 
   def getSuffixes(prefix: String): mutable.Set[String] =
     prefixes.getOrElse(prefix, new mutable.HashSet)
 
   def containsSuffix(prefix: String, suffix: String): Boolean =
-    prefixes get prefix exists (set => set(suffix))
+    prefixes.get(prefix).exists(set => set(suffix))
 
   def getBindings(tag: String): mutable.Map[String, String] =
     bindings.getOrElse(tag, new mutable.HashMap)
 
   def getBinding(option: String, key: String): Option[String] =
-    bindings get option flatMap (_ get key)
+    bindings.get(option).flatMap(_.get(key))
 
   def getOthers: List[String] = others.toList
 }
