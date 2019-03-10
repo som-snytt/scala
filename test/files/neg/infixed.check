@@ -1,0 +1,9 @@
+infixed.scala:15: warning: method f is not intended to be used as an infix operator
+  def t1 = X f 42
+             ^
+infixed.scala:18: warning: method m is not intended to be used as a postfix operator
+  def t3 = X m
+             ^
+error: No warnings can be incurred under -Xfatal-warnings.
+two warnings found
+one error found

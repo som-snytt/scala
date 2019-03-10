@@ -4954,9 +4954,15 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               // The enclosing context may be case c @ C(_) => or val c @ C(_) = v.
               tree1 modifyType (_.finalResultType)
               tree1
-            case tree1                                                               => tree1
+            case tree1 @ Apply(fun1, _) => checkInfix(tree, fun1, tree1) ; tree1
+            case tree1 => tree1
           }
       }
+      def checkInfix(original: Tree, fun: Tree, result: Tree): Unit =
+        if (settings.warnInfix && original.hasAttachment[InfixApplicationAttachment.type]
+            && fun.hasExistingSymbol && !fun.symbol.hasAnnotation(InfixAnnotationClass)
+            && Character.isUnicodeIdentifierStart(fun.symbol.decodedName.head))
+          context.warning(original.pos, s"${fun.symbol} is not intended to be used as an infix operator")
 
       def convertToAssignment(fun: Tree, qual: Tree, name: Name, args: List[Tree]): Tree = {
         val prefix = name.toTermName stripSuffix nme.EQL
@@ -5243,9 +5249,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             val qualTyped = checkDead(context, typedQualifier(qual, mode))
             val tree1 = typedSelect(tree, qualTyped, name)
 
-            if (tree.isInstanceOf[PostfixSelect])
-              checkFeature(tree.pos, currentRun.runDefinitions.PostfixOpsFeature, name.decode)
             val sym = tree1.symbol
+            if (tree.isInstanceOf[PostfixSelect]) {
+              checkFeature(tree.pos, currentRun.runDefinitions.PostfixOpsFeature, name.decode)
+              if (sym != null) checkPostfix(tree.pos, sym)
+            }
             if (sym != null && sym.isOnlyRefinementMember && !sym.isMacro)
               checkFeature(tree1.pos, currentRun.runDefinitions.ReflectiveCallsFeature, sym.toString)
 
@@ -5255,6 +5263,10 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             }
           }
       }
+
+      def checkPostfix(pos: Position, sym: Symbol): Unit =
+        if (settings.warnPostfix && !sym.hasAnnotation(PostfixAnnotationClass))
+          context.warning(pos, s"$sym is not intended to be used as a postfix operator")
 
       /* A symbol qualifies if:
        *  - it exists

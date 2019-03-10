@@ -881,12 +881,13 @@ self =>
           }
           Block(
             liftedArg :: Nil,
-            Apply(mkSelection(right), List(Ident(x) setPos left.pos.focus)))
+            Apply(mkSelection(right), List(Ident(x) setPos left.pos.focus)).updateAttachment(InfixApplicationAttachment)
+          )
         } else {
-          Apply(mkSelection(left), arguments)
+          Apply(mkSelection(left), arguments).updateAttachment(InfixApplicationAttachment)
         }
       } else {
-        Apply(Ident(op.encode), stripParens(left) :: arguments)
+        Apply(Ident(op.encode), stripParens(left) :: arguments).updateAttachment(InfixApplicationAttachment)
       }
     }
 

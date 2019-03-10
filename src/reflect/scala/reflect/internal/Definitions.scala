@@ -1529,7 +1529,9 @@ trait Definitions extends api.StandardDefinitions {
       case _                  => false
     }
 
-    lazy val ShowAsInfixAnnotationClass = rootMirror.getClassIfDefined("scala.annotation.showAsInfix")
+    lazy val InfixAnnotationClass = getClassIfDefined("scala.annotation.infix")
+    lazy val PostfixAnnotationClass = getClassIfDefined("scala.annotation.postfix")
+    lazy val ShowAsInfixAnnotationClass = getClassIfDefined("scala.annotation.showAsInfix")
 
     // todo: reconcile with javaSignature!!!
     def signature(tp: Type): String = {

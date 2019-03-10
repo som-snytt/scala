@@ -111,6 +111,8 @@ trait Warnings {
     val ValPattern             = LintWarning("valpattern",                "Enable pattern checks in val definitions.")
     val EtaZero                = LintWarning("eta-zero",                  "Warn on eta-expansion (rather than auto-application) of zero-ary method.")
     val EtaSam                 = LintWarning("eta-sam",                   "Warn on eta-expansion to meet a Java-defined functional interface that is not explicitly annotated with @FunctionalInterface.")
+    val InfixStyle             = LintWarning("infix",                     "Warn if member is not intended for infix application.")
+    val PostfixStyle           = LintWarning("postfix",                   "Warn if member is not intended for postfix application.")
 
     def allLintWarnings = values.toSeq.asInstanceOf[Seq[LintWarning]]
   }
@@ -138,6 +140,8 @@ trait Warnings {
   def lintValPatterns            = lint contains ValPattern
   def warnEtaZero                = lint contains EtaZero
   def warnEtaSam                 = lint contains EtaSam
+  def warnInfix                  = lint contains InfixStyle
+  def warnPostfix                = lint contains PostfixStyle
 
   // The Xlint warning group.
   val lint = MultiChoiceSetting(
