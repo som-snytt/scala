@@ -1,0 +1,6 @@
+t5715.scala:4: warning: then is a reserved word (since 2.10.0); usage as an identifier is deprecated
+  def then = 42     // deprecation of reserved word
+      ^
+error: No warnings can be incurred under -Werror.
+one warning found
+one error found
