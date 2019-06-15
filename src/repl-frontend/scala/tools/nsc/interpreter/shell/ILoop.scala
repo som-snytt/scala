@@ -159,7 +159,7 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
 
     def apply(line: String): Result = {
       if (history eq NoHistory)
-        return "No history available."
+        return Result.echoing("No history available.")
 
       val xs      = words(line)
       val current = history.index
@@ -169,17 +169,19 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
 
       for ((line, index) <- lines.zipWithIndex)
         echo("%3d  %s".format(index + offset, line))
+      Result.default
     }
   }
 
 
   /** Search the history */
-  def searchHistory(_cmdline: String): Unit = {
+  def searchHistory(_cmdline: String) = {
     val cmdline = _cmdline.toLowerCase
     val offset  = history.index - history.size + 1
 
     for ((line, index) <- history.asStrings.zipWithIndex ; if line.toLowerCase contains cmdline)
       echo("%d %s".format(index + offset, line))
+    Result.default
   }
 
   import LoopCommand.{ cmd, nullary, cmdWithHelp }
@@ -257,58 +259,28 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
   }
 
 
-  private def importsCommand(line: String): Result =
-    intp.importsCommandInternal(words(line)) mkString ("\n")
-
-
-  private def findToolsJar() = PathResolver.SupplementalLocations.platformTools
-
-  private def addToolsJarToLoader() = {
-    val cl = findToolsJar() match {
-      case Some(tools) => ScalaClassLoader.fromURLs(Seq(tools.toURL), intp.classLoader)
-      case _           => intp.classLoader
-    }
-    if (Javap.isAvailable(cl)) {
-      repldbg(":javap available.")
-      cl
-    }
-    else {
-      repldbg(":javap unavailable: no tools.jar at " + jdkHome)
-      intp.classLoader
-    }
+  private def importsCommand(line: String) = Result.echoing {
+    intp.importsCommandInternal(words(line)).mkString("\n")
   }
 
-  protected def newJavap() = JavapClass(addToolsJarToLoader(), intp.reporter.out, intp)
-
-  private lazy val javap =
-    try newJavap()
-    catch {
-      case t: ControlThrowable => throw t
-      case t: Throwable =>
-        repldbg("javap: " + rootCause(t))
-        repltrace(stackTraceString(rootCause(t)))
-        NoJavap
-    }
-
-
-
-  private def implicitsCommand(line: String): Result = {
+  private def implicitsCommand(line: String) = Result.echoing {
     val (implicits, res) = intp.implicitsCommandInternal(line)
     implicits foreach echoCommandMessage
     res
   }
 
   // Still todo: modules.
-  private def typeCommand(line0: String): Result = {
+  private def typeCommand(line0: String) = Result.echoing {
     line0.trim match {
       case "" => ":type [-v] <expression>. see also :help kind"
       case s  =>
         val verbose = s startsWith "-v "
         val (sig, verboseSig) = intp.typeCommandInternal(s.stripPrefix("-v ").trim, verbose)
-        if (verbose) echoCommandMessage("// Type signature")
-        echoCommandMessage(sig)
-        if (!verboseSig.isEmpty) echoCommandMessage("\n// Internal Type structure\n"+ verboseSig)
-        ()
+        var res: String = ""
+        if (verbose) res += "// Type signature"
+        res += sig
+        if (!verboseSig.isEmpty) res = s"$res\n// Internal Type structure\n$verboseSig"
+        res
     }
   }
 
@@ -352,35 +324,26 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
        |`List` or `Vector`.
        |""".stripMargin
 
-  private def kindCommand(expr: String): Result = {
+  private def kindCommand(expr: String) = Result.echoing {
     expr.trim match {
       case "" => s":kind $kindUsage"
       case s  => intp.kindCommandInternal(s.stripPrefix("-v ").trim, verbose = s.startsWith("-v "))
     }
   }
 
-  private def warningsCommand(): Result = {
+  private def warningsCommand(): Result =
     if (intp.lastWarnings.isEmpty)
-      "Can't find any cached warnings."
-    else
+      Result.echoing("Can't find any cached warnings.")
+    else {
       intp.lastWarnings foreach { case (pos, msg) => intp.reporter.warning(pos, msg) }
-  }
+      Result.default
+    }
 
-  private def javapCommand(line: String): Result = {
-    if (javap == null)
-      s":javap unavailable, no tools.jar at $jdkHome.  Set JDK_HOME."
-    else if (line == "")
-      Javap.helpText
-    else
-      javap(words(line)) foreach { res =>
-        if (res.isError) return s"Failed: ${res.value}"
-        else res.show()
-      }
-  }
+  private def javapCommand(line: String) = Result.echoing(intp.print(line))
 
   private def pathToPhaseWrapper = intp.originalPath("$r") + ".phased.atCurrent"
 
-  private def phaseCommand(name: String): Result = {
+  private def phaseCommand(name: String) = Result.echoing {
     val phased: Phased = intp.power.phased
     import phased.NoPhaseName
 
@@ -731,8 +694,11 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
   }
 
   def powerCmd(): Result = {
-    if (isReplPower) "Already in power mode."
-    else enablePowerMode(isDuringInit = false)
+    if (isReplPower) Result.echoing("Already in power mode.")
+    else {
+      enablePowerMode(isDuringInit = false)
+      Result.default
+    }
   }
   def enablePowerMode(isDuringInit: Boolean) = {
     config.power setValue true

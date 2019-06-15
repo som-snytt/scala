@@ -191,6 +191,11 @@ trait Repl extends ReplCore {
     */
   def typeCommandInternal(expr: String, verbose: Boolean): (String, String)
 
+  /** Print bytecode for a target.
+   *  The target may be a class, method, or result name.
+   */
+  def print(target: String): String
+
   // Used in a test case.
   def showDirectory: String
 

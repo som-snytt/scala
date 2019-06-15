@@ -1329,6 +1329,11 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     repldbg(msg + " " + res)
     res
   }
+
+  /** A string representation of a target symbol, such as javap output. */
+  def print(target: String): String = {
+    s"Your print result for $target"
+  }
 }
 
 /** Utility methods for the Interpreter. */

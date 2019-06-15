@@ -77,27 +77,23 @@ trait LoopCommands {
   }
 
   /** print a friendly help message */
-  def helpCommand(line: String): Result = line match {
+  def helpCommand(line: String): Result = Result.echoing(line match {
     case ""                => helpSummary()
-    case CommandMatch(cmd) => echo(f"%n${cmd.detailedHelp getOrElse cmd.help}")
+    case CommandMatch(cmd) => f"%n${cmd.detailedHelp getOrElse cmd.help}"
     case _                 => ambiguousError(line)
-  }
+  })
 
   def helpSummary() = {
     val usageWidth = commands.map(_.usageMsg.length).max
-    val formatStr  = s"%-${usageWidth}s %s"
-
-    echo("All commands can be abbreviated, e.g., :he instead of :help.")
-
-    for (cmd <- commands) echo(formatStr.format(cmd.usageMsg, cmd.help))
+    val formatStr  = s"%-${usageWidth}s %s%n"
+    val header = "All commands can be abbreviated, e.g., :he instead of :help."
+    commands.map(cmd => formatStr.format(cmd.usageMsg, cmd.help)).mkString(header, "", "")
   }
-  def ambiguousError(cmd: String): Result = {
+  def ambiguousError(cmd: String) =
     matchingCommands(cmd) match {
-      case Nil  => echo(s"No such command '$cmd'.  Type :help for help.")
-      case xs   => echo(cmd + " is ambiguous: did you mean " + xs.map(":" + _.name).mkString(" or ") + "?")
+      case Nil  => s"No such command '$cmd'.  Type :help for help."
+      case xs   => s"$cmd is ambiguous: did you mean ${xs.map(":" + _.name).mkString(" or ")}?"
     }
-    Result(keepRunning = true, None)
-  }
 
   // all commands with given prefix
   private def matchingCommands(cmd: String) = commands.filter(_.name.startsWith(cmd.stripPrefix(":")))
@@ -117,10 +113,10 @@ trait LoopCommands {
 
   // expect line includes leading colon
   def colonCommand(line: String): Result = line.trim match {
-    case ""                                  => helpSummary()
+    case ""                                  => Result.echoing(helpSummary())
     case commandish(CommandMatch(cmd), rest) => cmd(rest)
-    case commandish(name, _)                 => ambiguousError(name)
-    case _                                   => echo("?")
+    case commandish(name, _)                 => Result.echoing(ambiguousError(name))
+    case _                                   => Result.echoing("?")
   }
 
   def colonCompletion(line: String, cursor: Int): Completion =
@@ -176,12 +172,13 @@ trait LoopCommands {
     // "keep running, and record this line"
     def recording(line: String) = Result(keepRunning = true, Option(line))
 
-    // most commands do not want to micromanage the Result, but they might want
-    // to print something to the console, so we accommodate Unit and String returns.
-    implicit def resultFromUnit(x: Unit): Result = default
-    implicit def resultFromString(msg: String): Result = {
+    // "echo only and keep running"
+    def echoing(msg: String) = {
       echoCommandMessage(msg)
       default
     }
+
+    // remove me
+    implicit def unitDiscard(u: Unit): Result = default
   }
 }
