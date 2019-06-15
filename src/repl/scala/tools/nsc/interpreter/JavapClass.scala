@@ -10,7 +10,7 @@
  * additional information regarding copyright ownership.
  */
 
-package scala.tools.nsc.interpreter.shell
+package scala.tools.nsc.interpreter
 
 import java.io._
 import java.lang.{Iterable => JIterable}
