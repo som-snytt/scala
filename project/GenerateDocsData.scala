@@ -29,15 +29,81 @@ trait SettingsDescriptorModel {
     def dehtmlfy(s: String): String = htmlTag.replaceAllIn(s, "$1")
   }
 }
+trait Emitter { _: SettingsDescriptorModel =>
+  private var indent = 0
+  def indented(body: => Unit): Unit = { indent += 1; body; indent -= 1 }
+  implicit class SB(val sc: StringContext) {
+    def sb(args: Any*)(implicit sb: StringBuilder): Unit = {
+      import StringContext.{checkLengths, processEscapes}
+      checkLengths(args, sc.parts)
+      val pi = sc.parts.iterator
+      val ai = args.iterator
+      sb.append(processEscapes(pi.next()))
+      while (ai.hasNext) {
+        sb.append(ai.next())
+        sb.append(process(pi.next()))
+      }
+    }
+  }
+  implicit class Times(val n: Int) extends AnyVal {
+    def times(body: => Unit): Unit = {
+      def loop(val i: Int): Unit = if (i < n) { body ; loop(i + 1) }
+      loop(0)
+    }
+  }
+  def element(tag: String, value: String = "", head: Boolean = false)(implicit sb: StringBuilder): Unit = {
+    indent.times(sb.append("  "))
+    if (head) sb"- " else sb"  "
+    if (tag.nonEmpty) sb"$tag:"
+    if (value.nonEmpty) {
+      if (tag.nonEmpty) sb" "
+      sb""""$value""""
+    }
+    sb"\n"
+  }
+  def maybe[A](tag: String, value: Option[A])(implicit sb: StringBuilder): Unit = value.foreach(v => element(tag, v.toString))
+  def maybes[A](tag: String, value: Seq[A], handlers: (A => Unit)*)(implicit sb: StringBuilder): Unit =
+    if (value.nonEmpty) {
+      element(tag)
+      value.foreach(v => handlers.foreach(h => h(v)))
+    }
+  def emit(section: Section)(implicit sb: StringBuilder): Unit = {
+    val Section(title, text, options) = section
+    element("category", title, head = true)
+    element("description", text)
+    element("options")
+    indented {
+      options.foreach {
+        case ScalacOption(option, schema, description, abbreviations, deprecated, note) =>
+          element("option", option, head = true)
+          element("schema")
+          indented {
+            import schema._
+            element("type", `type`)
+            maybe("arg", arg)
+            maybe("multiple", multiple)
+            maybe("default", default)
+            maybes("choices", choices,
+              (c: Choice) => indented(element("choice", c.choice, head = true)),
+              (c: Choice) => indented(maybe("description", c.description)))
+            maybe("min", min)
+            maybe("max", max)
+          }
+          element("description", description)
+          maybes("abbreviations", abbreviations, (x: String) => indented(element("", x, head = true)))
+      }
+    }
+  }
+}
 /** Externalize a descriptor of ScalaSettings in YAML format.
  */
-class SettingsDescriptor extends SettingsDescriptorModel {
+class SettingsDescriptor extends SettingsDescriptorModel with Emitter {
   import scala.tools.nsc.Settings
   val settings = new Settings(_ => ???)
   import settings._
   import Fixup._
   // Pasted from ./src/compiler/scala/tools/nsc/settings/AbsSettings.scala to avoid bootstrap error.
-  // The names have been changed to protect the innocent. Also extra categories.
+  // Extra categories are supported.
   implicit class UpgradedTests(s: Setting) {
     import s.{name, deprecationMessage}
     def isAdvanced_?   = name.startsWith("-X") && name != "-X"
@@ -103,51 +169,7 @@ class SettingsDescriptor extends SettingsDescriptorModel {
         val options = visibleSettings.filter(predicate).map(option).toList.sortBy(_.option)
         Section(title, text, options)
     }
-    val sb = new StringBuilder
-    var indent = 0
-    def element(tag: String, value: String = "", head: Boolean = false): Unit = {
-      sb.append("  " * indent).append(if (head) "- " else "  ")
-      if (tag.nonEmpty) sb.append(tag).append(":")
-      if (value.nonEmpty) {
-        if (tag.nonEmpty) sb.append(" ")
-        sb.append("\"").append(value).append("\"")
-      }
-      sb.append("\n")
-    }
-    def maybe[A](tag: String, value: Option[A]): Unit = value.foreach(v => element(tag, v.toString))
-    def maybes[A](tag: String, value: Seq[A], handlers: (A => Unit)*): Unit =
-      if (value.nonEmpty) {
-        element(tag)
-        value.foreach(v => handlers.foreach(h => h(v)))
-      }
-    def indented(body: => Unit): Unit = { indent += 1; body; indent -= 1 }
-    def emit(section: Section): Unit = {
-      val Section(title, text, options) = section
-      element("category", title, head = true)
-      element("description", text)
-      element("options")
-      indented {
-        options.foreach {
-          case ScalacOption(option, schema, description, abbreviations, deprecated, note) =>
-            element("option", option, head = true)
-            element("schema")
-            indented {
-              import schema._
-              element("type", `type`)
-              maybe("arg", arg)
-              maybe("multiple", multiple)
-              maybe("default", default)
-              maybes("choices", choices,
-                (c: Choice) => indented(element("choice", c.choice, head = true)),
-                (c: Choice) => indented(maybe("description", c.description)))
-              maybe("min", min)
-              maybe("max", max)
-            }
-            element("description", description)
-            maybes("abbreviations", abbreviations, (x: String) => indented(element("", x, head = true)))
-        }
-      }
-    }
+    implicit val sb = new StringBuilder
     grouped.foreach(emit)
     sb.toString()
   }
