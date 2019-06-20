@@ -44,6 +44,7 @@ trait InteractiveReader {
     else readOneLine(prompt)
     */
 
+  @deprecated("No longer used", "2.13.1")
   def initCompletion(completion: Completion): Unit = ()
 }
 

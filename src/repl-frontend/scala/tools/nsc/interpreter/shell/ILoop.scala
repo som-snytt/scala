@@ -186,11 +186,12 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
 
   /** Standard commands **/
   lazy val standardCommands = List(
-    cmd("completions", "<string>", "output completions for the given string", completionsCommand),
-    cmd("edit", "<id>|<line>", "edit history", editCommand),
     cmd("help", "[command]", "print this summary or command-specific help", helpCommand),
-    historyCommand,
-    cmd("h?", "<string>", "search the history", searchHistory),
+    cmd("completions", "<string>", "output completions for the given string", completionsCommand),
+    // TODO maybe just drop these commands, as jline subsumes them -- before reenabling, finish scala.tools.nsc.interpreter.jline.HistoryAdaptor
+    //cmd("edit", "<id>|<line>", "edit history", editCommand),
+    //historyCommand,
+    //cmd("h?", "<string>", "search the history", searchHistory),
     cmd("imports", "[name name ...]", "show import history, identifying sources of names", importsCommand),
     cmd("implicits", "[-v]", "show the implicits in scope", implicitsCommand),
     cmd("javap", "<path|class>", "disassemble a file or class name", javapCommand),
@@ -910,7 +911,7 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
           case Some(s) => interpretStartingWith(s)
           case _       => None
         }
-      case invocation() => interpretStartingWith(intp.mostRecentVar + start)
+      case invocation() => in.accumulator += intp.mostRecentVar + start ; loop()
       case _ => in.accumulator += start ; loop()
     }
   }
@@ -961,8 +962,6 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
       }
 
       echoOff { interpretPreamble }
-
-      //if (doCompletion) in.initCompletion(newCompleter())
     })
 
     // start full loop (if initialization was successful)
