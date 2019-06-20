@@ -144,7 +144,6 @@ class JavapClass(
     }
     protected def noToolError = new JpError(s"No javap tool available: ${getClass.getName} failed to initialize.")
 
-
     // output filtering support
     val writer = new CharArrayWriter
     def written = {

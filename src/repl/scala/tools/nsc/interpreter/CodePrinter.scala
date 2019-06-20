@@ -14,6 +14,14 @@
 
 package scala.tools.nsc.interpreter
 
+import java.io.PrintWriter
+
+/** The underlying tool, either ToolProvider or wrapper for old Task. */
+trait CodePrinterTool {
+  /** Print whatever the args ask for to out. */
+  def print(out: PrintWriter, err: PrintWriter, args: Array[String]): Unit
+}
+
 trait CodePrinter {
   def print(target: String): String
 }

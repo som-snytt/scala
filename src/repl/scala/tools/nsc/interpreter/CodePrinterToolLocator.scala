@@ -20,7 +20,7 @@ import java.io.{PrintWriter, StringWriter}
 /** Java 8 tool locator. */
 object CodePrinterToolLocator {
   /** Locate the tool. */
-  def tool(intp: IMain): CodePrinter = {
+  def tool(intp: IMain): CodePrinterTool = {
     val loader = PathResolver.SupplementalLocations.platformTools.map(tools =>
       ScalaClassLoader.fromURLs(Seq(tools.toURL), intp.classLoader))
       .getOrElse(intp.classLoader)
