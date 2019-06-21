@@ -1331,7 +1331,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
   }
 
   /** A string representation of a target symbol, such as javap output. */
-  def print(target: String): String = CodePrinter.tool(this).print(target)
+  def print(target: String): String = CodePrinter.tool(this).map(CodePrinter(_)).getOrElse(CodePrinter.NoTool).print(target)
 }
 
 /** Utility methods for the Interpreter. */
