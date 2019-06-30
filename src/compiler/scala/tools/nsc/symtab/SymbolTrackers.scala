@@ -107,10 +107,8 @@ trait SymbolTrackers {
           "  "
         ).mkString take 2
 
-      def changedOwnerString = changed.owners get root match {
-        case Some(prev) => " [Owner was " + prev + ", now " + root.owner + "]"
-        case _          => ""
-      }
+      def changedOwnerString = changed.owners.get(root).fold("")(prev => s" [Owner was $prev, now ${root.owner}]")
+
       def flagSummaryString = changed.flags get root match {
         case Some(oldFlags) =>
           val added   = masked & ~oldFlags

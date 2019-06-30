@@ -1437,13 +1437,13 @@ class Global(var currentSettings: Settings, reporter0: LegacyReporter)
     // Similarly, this will only be created under -Yshow-syms.
     object trackerFactory extends SymbolTrackers {
       val global: Global.this.type = Global.this
-      lazy val trackers = currentRun.units.toList map (x => SymbolTracker(x))
+      lazy val trackers = currentRun.units.toList.map(SymbolTracker(_))
       def snapshot() = {
-        inform("\n[[symbol layout at end of " + phase + "]]")
+        inform(s"\n[[symbol layout at end of $phase]]")
         exitingPhase(phase) {
           trackers foreach { t =>
             t.snapshot()
-            inform(t.show("Heading from " + phase.prev.name + " to " + phase.name))
+            inform(t.show(s"Heading from ${phase.prev.name} to ${phase.name}"))
           }
         }
       }
