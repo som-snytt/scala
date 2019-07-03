@@ -1330,8 +1330,10 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     res
   }
 
+  private lazy val codePrinter = CodePrinter.tool(this).map(CodePrinter(_)).getOrElse(CodePrinter.NoTool)
+
   /** A string representation of a target symbol, such as javap output. */
-  def print(target: String): String = CodePrinter.tool(this).map(CodePrinter(_)).getOrElse(CodePrinter.NoTool).print(target)
+  def print(target: String): String = codePrinter.print(target)
 }
 
 /** Utility methods for the Interpreter. */

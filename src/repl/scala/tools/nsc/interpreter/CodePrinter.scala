@@ -23,6 +23,7 @@ trait CodePrinterTool {
   def print(out: PrintWriter, err: PrintWriter, args: Array[String]): Unit
 }
 
+/** Uses a tool such as javap or asm to print bytecode, filtering the output. */
 trait CodePrinter {
   def print(target: String): String
 }
@@ -33,7 +34,7 @@ class DelegatingCodePrinter(printer: CodePrinterTool) extends CodePrinter {
     val writer = new StringWriter
     val javapWriter = new PrintWriter(writer, /*autoflush=*/ true) // was intp.reporter.out
     try {
-      printer.print(javapWriter, javapWriter, Array.empty)
+      printer.print(javapWriter, javapWriter, Array(target))
       writer.toString
     } finally javapWriter.close()
   }
