@@ -422,13 +422,19 @@ object Ordering extends LowPriorityOrderingImplicits {
     }
     implicit object IeeeOrdering extends IeeeOrdering
   }
-  @deprecated("There are multiple ways to order Floats (Ordering.Float.TotalOrdering, " +
+  //Use either Ordering.Double.TotalOrdering or Ordering.Double.IeeeOrdering. 
+//See the documentation for Ordering.Double. Example usage: import Ordering.Double.TotalOrdering
+  @deprecated(s"There are multiple ways to order Floats (Ordering.Float.TotalOrdering, " +
     "Ordering.Float.IeeeOrdering). Specify one by using a local import, assigning an implicit val, or passing it " +
     "explicitly. See their documentation for details.", since = "2.13.0")
   implicit object DeprecatedFloatOrdering extends Float.TotalOrdering
 
   /** `Ordering`s for `Double`s.
     *
+    * $doubleOrdering
+    *
+    * @see [[Double.IeeeOrdering]]
+    * @see [[Double.TotalOrdering]]
     * @define doubleOrdering Because the behaviour of `Double`s specified by IEEE is
     *                        not consistent with a total ordering when dealing with
     *                        `NaN`, there are two orderings defined for `Double`:
