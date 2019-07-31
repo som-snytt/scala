@@ -177,6 +177,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
    * -Y "Private" settings
    */
   val Yhelp           = BooleanSetting    ("-Y", "Print a synopsis of private options.")
+  val Ylint           = BooleanSetting    ("-Ylint", "Make -Xlint more annoying.")
   val breakCycles     = BooleanSetting    ("-Ybreak-cycles", "Attempt to break cycles encountered during typing")
   val check           = PhasesSetting     ("-Ycheck", "Check the tree at the end of")
   val Ycompacttrees   = BooleanSetting    ("-Ycompact-trees", "Use compact tree printer when displaying trees.")

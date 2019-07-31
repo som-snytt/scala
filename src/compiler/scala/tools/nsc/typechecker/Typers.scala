@@ -2369,10 +2369,9 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
 
         if (meth.isClassConstructor && !isPastTyper && !meth.owner.isSubClass(AnyValClass) && !meth.isJava) {
           // There are no supercalls for AnyVal or constructors from Java sources, which
-        // would blow up in analyzeSuperConsructor; there's nothing to be computed for them
-          // anyway.
+          // would blow up in analyzeSuperConsructor; there's nothing to be computed for them anyway.
           if (meth.isPrimaryConstructor)
-          analyzeSuperConsructor(meth, vparamss1, rhs1)
+            analyzeSuperConsructor(meth, vparamss1, rhs1)
           else
             checkSelfConstructorArgs(ddef, meth.owner)
         }
