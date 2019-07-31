@@ -1448,9 +1448,15 @@ trait Namers extends MethodSynthesis {
       }
 
       // Add a () parameter section if this overrides some method with () parameters
-      val vparamSymssOrEmptyParamsFromOverride =
-        if (overridden != NoSymbol && vparamSymss.isEmpty && overridden.alternatives.exists(_.info.isInstanceOf[MethodType])) ListOfNil // NOTE: must check `.info.isInstanceOf[MethodType]`, not `.isMethod`!
-        else vparamSymss
+      val vparamSymssOrEmptyParamsFromOverride = {
+        // must check `.info.isInstanceOf[MethodType]`, not `.isMethod`! Note that matching MethodType of NullaryMethodType must be nilary not nelary.
+        def overriddenNilary(sym: Symbol) = sym.info.isInstanceOf[MethodType] && {
+          if (settings.warnNullaryOverride && (!sym.isJavaDefined || settings.Ylint))
+            reporter.warning(ddef.pos, "nullary method assumes an empty parameter list from the overridden definition")
+          true
+        }
+        if (overridden != NoSymbol && vparamSymss.isEmpty && overridden.alternatives.exists(overriddenNilary)) ListOfNil else vparamSymss
+      }
 
       val methSig = deskolemizedPolySig(vparamSymssOrEmptyParamsFromOverride, resTp)
       pluginsTypeSig(methSig, typer, ddef, resTpGiven)

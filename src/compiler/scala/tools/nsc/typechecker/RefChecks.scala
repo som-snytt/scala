@@ -457,11 +457,8 @@ abstract class RefChecks extends Transform {
               // Don't bother users with deprecations caused by classes they inherit.
               // Only warn for the pair that has one leg in `clazz`.
               if (clazz == memberClass) checkOverrideDeprecated()
-              if (settings.warnNullaryOverride) {
-                if (other.paramss.isEmpty && !member.paramss.isEmpty && !member.isJavaDefined) {
-                  reporter.warning(member.pos, "non-nullary method overrides nullary method")
-                }
-              }
+              if (settings.warnNullaryOverride && other.paramss.isEmpty && !member.paramss.isEmpty && !member.isJavaDefined)
+                reporter.warning(member.pos, "non-nullary method overrides nullary method")
             }
           }
         }

@@ -1,4 +1,4 @@
-// scalac: -Werror -Xlint:nullary-override
+// scalac: -Werror -Xlint:nullary-override -Ylint
 //
 class A { def x: Int = 3 }
 class B extends A { override def x(): Int = 4 }
