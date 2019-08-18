@@ -1029,21 +1029,12 @@ trait Contexts { self: Analyzer =>
         (e ne null) && (e.owner == scope) && (!currentRun.isScala212 || e.sym.exists)
       })
 
-    /** Do something with the symbols with name `name` imported via the import in `imp`,
-     *  if any such symbol is accessible from this context and is a qualifying implicit.
-     */
-    private def withQualifyingImplicitAlternatives(imp: ImportInfo, name: Name, pre: Type)(f: Symbol => Unit) = for {
-      sym <- importedAccessibleSymbol(imp, name, requireExplicit = false, record = false).alternatives
-      if isQualifyingImplicit(name, sym, pre, imported = true)
-    } f(sym)
-
     private def collectImplicits(syms: Scope, pre: Type, imported: Boolean = false): List[ImplicitInfo] =
       for (sym <- syms.toList if isQualifyingImplicit(sym.name, sym, pre, imported)) yield
         new ImplicitInfo(sym.name, pre, sym)
 
     private def collectImplicitImports(imp: ImportInfo): List[ImplicitInfo] = if (isExcludedRootImport(imp)) List() else {
       val qual = imp.qual
-
       val pre = qual.tpe
       def collect(sels: List[ImportSelector]): List[ImplicitInfo] = sels match {
         case List() =>
@@ -1056,11 +1047,17 @@ trait Contexts { self: Analyzer =>
           // consistent with what is done just below for named imports.
           collectImplicits(qual.tpe.implicitMembers, pre, imported = true)
         case (sel @ ImportSelector(from, _, to, _)) :: sels1 =>
-          var impls = collect(sels1).filter(info => info.name != from)
+          var impls = collect(sels1).filter(_.name != from)
           if (!sel.isMask) {
-            withQualifyingImplicitAlternatives(imp, to, pre) { sym =>
-              impls = new ImplicitInfo(to, pre, sym) :: impls
+            val name = to
+            val imported = importedAccessibleSymbol(imp, imp.importedSymbol(name))
+            if (imported.isOverloaded) {
+              for (sym <- imported.alternatives)
+                if (isQualifyingImplicit(name, sym, pre, imported = true))
+                  impls = new ImplicitInfo(name, pre, sym) :: impls
             }
+            else if (isQualifyingImplicit(name, imported, pre, imported = true))
+              impls = new ImplicitInfo(name, pre, imported) :: impls
           }
           impls
       }
@@ -1149,8 +1146,8 @@ trait Contexts { self: Analyzer =>
       val imp1Explicit = imp1 isExplicitImport name
       val imp2Explicit = imp2 isExplicitImport name
       val ambiguous    = if (imp1.depth == imp2.depth) imp1Explicit == imp2Explicit else !imp1Explicit && imp2Explicit
-      val imp1Symbol   = (imp1 importedSymbol name).initialize filter (s => isAccessible(s, imp1.qual.tpe, superAccess = false))
-      val imp2Symbol   = (imp2 importedSymbol name).initialize filter (s => isAccessible(s, imp2.qual.tpe, superAccess = false))
+      val imp1Symbol   = imp1.importedSymbol(name).initialize.filter(isAccessible(_, imp1.qual.tpe, superAccess = false))
+      val imp2Symbol   = imp2.importedSymbol(name).initialize.filter(isAccessible(_, imp2.qual.tpe, superAccess = false))
 
       // The types of the qualifiers from which the ambiguous imports come.
       // If the ambiguous name is a value, these must be the same.
@@ -1215,12 +1212,11 @@ trait Contexts { self: Analyzer =>
       res
     }
 
-    /** The symbol with name `name` imported via the import in `imp`,
-     *  if any such symbol is accessible from this context.
+    /** If the given import is permitted, fetch the symbol and filter for accessibility.
      */
-    private[Contexts] def importedAccessibleSymbol(imp: ImportInfo, name: Name, requireExplicit: Boolean, record: Boolean): Symbol =
+    private[Contexts] def importedAccessibleSymbol(imp: ImportInfo, sym: => Symbol): Symbol =
       if (isExcludedRootImport(imp)) NoSymbol
-      else imp.importedSymbol(name, requireExplicit, record) filter (s => isAccessible(s, imp.qual.tpe, superAccess = false))
+      else sym.filter(isAccessible(_, imp.qual.tpe, superAccess = false))
 
     private def isExcludedRootImport(imp: ImportInfo): Boolean =
       imp.isRootImport && excludedRootImportsCached.get(unit).exists(_.contains(imp.qual.symbol))
@@ -1418,15 +1414,18 @@ trait Contexts { self: Analyzer =>
         }
       nextDefinition()
 
-      if (symbolDepth < 0)
-        symbolDepth = cx.depth
+      if (symbolDepth < 0) symbolDepth = cx.depth
 
       var impSym: Symbol = NoSymbol
+      var impSel: ImportSelector = null
       val importCursor = new ImportCursor(thisContext, name)
       import importCursor.{imp1, imp2}
 
-      def lookupImport(imp: ImportInfo, requireExplicit: Boolean) =
-        thisContext.importedAccessibleSymbol(imp, name, requireExplicit, record = true) filter qualifies
+      def lookupImport(imp: ImportInfo, requireExplicit: Boolean): (ImportSelector, Symbol) = {
+        val (sel, sym) = imp.importedSelectedSymbol(name, requireExplicit)
+        val sym1 = thisContext.importedAccessibleSymbol(imp, sym).filter(qualifies)
+        (sel, sym1)
+      }
 
       /* Java: A single-type-import declaration d in a compilation unit c of package p
        * that imports a type named n shadows, throughout c, the declarations of:
@@ -1452,7 +1451,9 @@ trait Contexts { self: Analyzer =>
       )
 
       while (!impSym.exists && importCursor.imp1Exists && importCanShadowAtDepth(importCursor.imp1)) {
-        impSym = lookupImport(imp1, requireExplicit = false)
+        val (sel, sym) = lookupImport(imp1, requireExplicit = false)
+        impSym = sym
+        impSel = sel
         if (!impSym.exists)
           importCursor.advanceImp1Imp2()
       }
@@ -1516,15 +1517,11 @@ trait Contexts { self: Analyzer =>
         // symbol (e.g. import foo.X followed by import foo._) then we discard imp2
         // and proceed. If we cannot, issue an ambiguity error.
         while (lookupError == null && importCursor.keepLooking) {
-          // If not at the same depth, limit the lookup to explicit imports.
-          // This is desirable from a performance standpoint (compare to
-          // filtering after the fact) but also necessary to keep the unused
-          // import check from being misled by symbol lookups which are not
-          // actually used.
-          val other = lookupImport(imp2, requireExplicit = !importCursor.sameDepth)
+          // If not at the same depth, only an explicit import can induce an ambiguity.
+          val (sel, other) = lookupImport(imp2, requireExplicit = !importCursor.sameDepth)
 
           @inline def imp1wins(): Unit = { importCursor.advanceImp2() }
-          @inline def imp2wins(): Unit = { impSym = other; importCursor.advanceImp1Imp2() }
+          @inline def imp2wins(): Unit = { impSym = other; impSel = sel; importCursor.advanceImp1Imp2() }
           if (!other.exists) // imp1 wins; drop imp2 and continue.
             imp1wins()
           else if (importCursor.imp2Wins) // imp2 wins; drop imp1 and continue.
@@ -1534,6 +1531,10 @@ trait Contexts { self: Analyzer =>
             case _         => lookupError = ambiguousImports(imp1, imp2)
           }
         }
+
+        // the choice has been made
+        imp1.recordUsage(impSel, impSym)
+
         // optimization: don't write out package prefixes
         finish(duplicateAndResetPos.transform(imp1.qual), impSym)
       }
@@ -1745,19 +1746,13 @@ trait Contexts { self: Analyzer =>
     def isExplicitImport(name: Name): Boolean = tree.selectors.exists(_.introduces(name))
 
     /** The symbol with name `name` imported from import clause `tree`. */
-    def importedSymbol(name: Name): Symbol = importedSymbol(name, requireExplicit = false, record = true)
-
-    private def recordUsage(sel: ImportSelector, result: Symbol): Unit = {
-      debuglog(s"In $this at ${ pos.source.file.name }:${ posOf(sel).line }, selector '${ selectorString(sel)
-        }' resolved to ${
-          if (tree.symbol.hasCompleteInfo) s"(qual=$qual, $result)"
-          else s"(expr=${tree.expr}, ${result.fullLocationString})"
-        }")
-      allUsedSelectors(this) += sel
-    }
+    def importedSymbol(name: Name): Symbol = importedSymbol(name, requireExplicit = false)
 
     /** If requireExplicit is true, wildcard imports are not considered. */
-    def importedSymbol(name: Name, requireExplicit: Boolean, record: Boolean): Symbol = {
+    def importedSymbol(name: Name, requireExplicit: Boolean): Symbol =
+      importedSelectedSymbol(name, requireExplicit)._2
+
+    def importedSelectedSymbol(name: Name, requireExplicit: Boolean): (ImportSelector, Symbol) = {
       var result: Symbol = NoSymbol
       var renamed = false
       var selectors = tree.selectors
@@ -1774,8 +1769,6 @@ trait Contexts { self: Analyzer =>
         if (result == NoSymbol)
           selectors = selectors.tail
       }
-      if (record && settings.warnUnusedImport && selectors.nonEmpty && result != NoSymbol && pos != NoPosition)
-        recordUsage(current, result)
 
       // Harden against the fallout from bugs like scala/bug#6745
       //
@@ -1783,13 +1776,24 @@ trait Contexts { self: Analyzer =>
       //      check inside the above loop, as I believe that
       //      this always represents a mistake on the part of
       //      the caller.
-      if (definitions isImportable result) result
-      else NoSymbol
+      if (definitions isImportable result) (current, result)
+      else (null, NoSymbol)
     }
     private def selectorString(s: ImportSelector): String = {
       if (s.isWildcard) "_"
       else if (s.isRename) s.name + " => " + s.rename
       else "" + s.name
+    }
+
+    /** Optionally record that a selector was used to import the given symbol. */
+    def recordUsage(sel: ImportSelector, result: Symbol): Unit = {
+      debuglog(s"In $this at ${ pos.source.file.name }:${ posOf(sel).line }, selector '${ selectorString(sel)
+        }' resolved to ${
+          if (tree.symbol.hasCompleteInfo) s"(qual=$qual, $result)"
+          else s"(expr=${tree.expr}, ${result.fullLocationString})"
+        }")
+      if (settings.warnUnusedImport && result != NoSymbol && pos != NoPosition)
+        allUsedSelectors(this) += sel
     }
 
     def allImportedSymbols: Iterable[Symbol] =
