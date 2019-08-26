@@ -74,6 +74,7 @@ object Reader {
         .option(AUTO_GROUP, false)
         .option(LIST_PACKED, true)  // TODO
         .option(INSERT_TAB, true)   // At the beginning of the line, insert tab instead of completing
+        .option(HISTORY_TIMESTAMPED, false)         // Allows sharing history file between versions
         .variable(HISTORY_FILE, config.historyFile) // Save history to file
         .variable(SECONDARY_PROMPT_PATTERN, config.encolor(config.continueText)) // Continue prompt
     }
