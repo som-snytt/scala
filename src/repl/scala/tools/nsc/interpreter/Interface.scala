@@ -268,9 +268,6 @@ trait ReplReporter extends Reporter {
   def isDebug: Boolean
   def debug(msg: => String): Unit = if (isDebug) echo(msg)
 
-  def isTrace: Boolean
-  def trace(msg: => String): Unit = if (isTrace) echo(msg)
-
   //// Internal signalling from repl to shell
 
   /** Currently executing request (used to determine position of error in terms of user-submitted code)

@@ -218,7 +218,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
 
     try reporter.withoutPrintingResults(body) catch { case NonFatal(t) =>
       repldbg("withLastExceptionLock: " + rootCause(t))
-      reporter.trace(stackTraceString(rootCause(t)))
+      reporter.debug(stackTraceString(rootCause(t)))
       alt
     } finally bindExceptions = true
   }

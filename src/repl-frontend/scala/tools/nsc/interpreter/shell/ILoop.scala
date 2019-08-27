@@ -287,7 +287,7 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
       case t: ControlThrowable => throw t
       case t: Throwable =>
         repldbg("javap: " + rootCause(t))
-        repltrace(stackTraceString(rootCause(t)))
+        repldbg(stackTraceString(rootCause(t)))
         NoJavap
     }
 

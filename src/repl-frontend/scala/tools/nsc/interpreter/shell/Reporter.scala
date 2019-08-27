@@ -54,7 +54,6 @@ class ReplReporterImpl(val config: ShellConfig, val settings: Settings = new Set
 
   def colorOk: Boolean = config.colorOk
   def isDebug: Boolean = config.isReplDebug
-  def isTrace: Boolean = config.isReplTrace
 
   var printResults: Boolean = true
   override def togglePrintResults: Unit = printResults = !printResults
@@ -208,7 +207,7 @@ class ReplReporterImpl(val config: ShellConfig, val settings: Settings = new Set
 
   def printMessage(msg: String): Unit =
     if (!totalSilence) printlnAndFlush(msg)
-    else if (isTrace) printlnAndFlush("[silent] " + msg)
+    else if (isDebug) printlnAndFlush(s"[silent] $msg")
 
   override def displayPrompt(): Unit =
     if (!totalSilence) {

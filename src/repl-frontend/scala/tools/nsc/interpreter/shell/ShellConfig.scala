@@ -131,17 +131,27 @@ trait ShellConfig {
 
   def isReplInfo: Boolean  = info || isReplDebug
   def replinfo(msg: => String)   = if (isReplInfo)  echo(msg)
-  def isReplDebug: Boolean = debug || isReplTrace
+  def isReplDebug: Boolean = debug
   def repldbg(msg: => String)    = if (isReplDebug) echo(msg)
-  def isReplTrace: Boolean = trace
-  def repltrace(msg: => String)  = if (isReplTrace) echo(msg)
+
+  val logger: Logger = new Logger {
+    def error(msg: String): Unit = echo(msg)
+    def info(msg: => String): Unit = if (isReplInfo) echo (msg)
+    def debug(msg: => String): Unit = if (isReplDebug) echo(msg)
+  }
 
   def isReplPower: Boolean = power
 
-  private def echo(msg: => String) =
+  private def echo(msg: String) =
     try Console.println(msg)
     catch {
       case e: AssertionError =>
         Console.println(s"Assertion error printing debugging output: $e")
     }
+}
+
+trait Logger {
+  def error(msg: String): Unit
+  def info(msg: => String): Unit
+  def debug(msg: => String): Unit
 }
