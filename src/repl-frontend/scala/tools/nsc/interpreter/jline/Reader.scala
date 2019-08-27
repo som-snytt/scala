@@ -50,7 +50,7 @@ object Reader {
    */
   def apply(config: ShellConfig, repl: Repl, completion: shell.Completion, accumulator: Accumulator): Reader = {
     require(repl != null)
-    if (config.isReplDebug) initLogging()
+    initLogging(config)
 
     System.setProperty(LineReader.PROP_SUPPORT_PARSEDLINE, java.lang.Boolean.TRUE.toString())
 
@@ -174,12 +174,14 @@ object Reader {
     def words: JList[String] = tokens.map(t => line.substring(t.start, t.end)).asJava
   }
 
-  private def initLogging(): Unit = {
-    import java.util.logging._
+  import java.util.logging._
+  val handler = new MemoryHandler()
+
+  private def initLogging(config: ShellConfig): Unit = {
     val logger = Logger.getLogger("org.jline")
-    val handler = new ConsoleHandler()
-    logger.setLevel(Level.ALL)
-    handler.setLevel(Level.ALL)
+    val level  = if (config.isReplDebug) Level.ALL else Level.INFO
+    logger.setLevel(level)
+    handler.setLevel(level)
     logger.addHandler(handler)
   }
 }
