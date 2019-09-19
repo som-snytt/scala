@@ -283,9 +283,7 @@ trait TypeDiagnostics {
 
   // For found/required errors where AnyRef would have sufficed:
   // explain in greater detail.
-  def explainAnyVsAnyRef(found: Type, req: Type): String = {
-    if (AnyRefTpe <:< req) notAnyRefMessage(found) else ""
-  }
+  def explainAnyVsAnyRef(found: Type, req: Type): String = if (AnyRefTpe <:< req) s"\n${notAnyRefMessage(found)}" else ""
 
   def finalOwners(tpe: Type): Boolean = (tpe.prefix == NoPrefix) || recursivelyFinal(tpe)
 
