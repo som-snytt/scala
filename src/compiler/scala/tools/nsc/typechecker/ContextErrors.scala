@@ -381,6 +381,7 @@ trait ContextErrors {
               else NoSymbol
             }
             val companion = orEmpty(companionSymbol != NoSymbol)(s"note: $companionSymbol exists, but it has no companion object.")
+            if (!companion.isEmpty) new Throwable("debug").printStackTrace()
             // find out all the names available under target within 2 edit distances
             lazy val alternatives: List[String] = {
               val editThreshold = 2

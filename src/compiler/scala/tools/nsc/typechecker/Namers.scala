@@ -1789,6 +1789,7 @@ trait Namers extends MethodSynthesis {
 
     private def importSig(imp: Import) = {
       val Import(expr, selectors) = imp
+      println(s"importSig $expr")
       val expr1 = typer.typedQualifier(expr)
 
       if (expr1.symbol != null && expr1.symbol.isRootPackage)
