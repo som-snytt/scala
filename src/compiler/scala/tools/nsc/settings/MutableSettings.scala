@@ -569,6 +569,11 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
       override def postSetHook(): Unit = {
         super.postSetHook()
         try outputDirs.setSingleOutput(value)
+        /* TODO
+      override def value_=(str: String): Unit = {
+        super.value_=(str)
+        try outputDirs.setSingleOutput(str)
+        */
         catch { case FatalError(msg) => errorFn(msg) }
       }
   }
