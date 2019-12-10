@@ -587,8 +587,7 @@ trait Infer extends Checkable {
         // Can warn about inferring Any/AnyVal/Object as long as they don't appear
         // explicitly anywhere amongst the formal, argument, result, or expected type.
         // ...or lower bound of a type param, since they're asking for it.
-        var checked, warning = false
-        def checkForAny(): Unit = {
+        def checkForAny(): Boolean = {
           val collector = new ContainsAnyCollector(topTypes) {
             val seen = collection.mutable.Set.empty[Type]
             override def apply(t: Type): Unit = {
@@ -605,10 +604,19 @@ trait Infer extends Checkable {
             formals.exists(containsAny) ||
             argtpes.exists(containsAny) ||
             tparams.exists(x => containsAny(x.info.lowerBound))
-          checked = true
-          warning = !hasAny
+          hasAny
         }
-        def canWarnAboutAny = { if (!checked) checkForAny() ; warning }
+        var checked, warning = false
+        def canWarnAboutAny = {
+          if (!checked) {
+            if (isUniversalMember(fn.symbol))
+              warning = false
+            else
+              warning = !checkForAny()
+            checked = true
+          }
+          warning
+        }
         targs.foreach(targ => if (topTypes.contains(targ.typeSymbol) && canWarnAboutAny) reporter.warning(fn.pos, s"a type was inferred to be `${targ.typeSymbol.name}`; this may indicate a programming error."))
       }
       adjustTypeArgs(tparams, tvars, targs, restpe)
