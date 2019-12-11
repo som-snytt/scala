@@ -3545,8 +3545,35 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             if (context.reporter.hasErrors)
               setError(tree)
             else {
+              // fixup conversions applied to blocks (#9386) in lieu of retypechecking
+              def adjustConversionsToBlockArgs(appl: Tree): Tree = {
+                val treeInfo.Applied(f, t, argss) = appl
+                val needsAdjust =
+                  argss.exists {
+                    case (aiv: ApplyImplicitView) :: Nil =>
+                      aiv.args match {
+                        case Block(_, _) :: Nil => true
+                        case _ => false
+                      }
+                    case _ => false
+                  }
+                println(s"Needs adjust? $needsAdjust")
+                if (needsAdjust) {
+                  val adjusted =
+                    argss.map {
+                      case all @ ((aiv: ApplyImplicitView) :: Nil) =>
+                        aiv.args match {
+                          case Block(_, _) :: Nil =>
+                          case _ => all
+                        }
+                      case all => all
+                    }
+                }
+                else appl
+              }
               inferMethodAlternative(fun, undetparams, argTpes.toList, pt)
-              doTypedApply(tree, adaptAfterOverloadResolution(fun, mode.forFunMode, WildcardType), args1, mode, pt)
+              val applied = doTypedApply(tree, adaptAfterOverloadResolution(fun, mode.forFunMode, WildcardType), args1, mode, pt)
+              adjustConversionsToBlockArgs(applied)
             }
           }
           handleOverloaded
