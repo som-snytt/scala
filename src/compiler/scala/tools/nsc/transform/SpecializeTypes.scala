@@ -1725,13 +1725,19 @@ abstract class SpecializeTypes extends InfoTransform with TypingTransformers {
               deriveDefDef(tree1)(transform)
 
             case NormalizedMember(target) =>
-              logResult("constraints")(satisfiabilityConstraints(typeEnv(symbol))) match {
+              //logResult("constraints")(satisfiabilityConstraints(typeEnv(symbol))) match {
+              val te = typeEnv(symbol)
+              val sc = satisfiabilityConstraints(te)
+              val re = logResult("constraints")(sc)
+              println(s"target $target typeEnv $typeEnv, constr $sc, res $re")
+              re match {
                 case Some(constraint) if !target.isDeferred =>
                   // we have an rhs, specialize it
                   val tree1 = duplicateBody(ddef, target, constraint)
                   debuglog("implementation: " + tree1)
                   deriveDefDef(tree1)(transform)
                 case _ =>
+                  debuglog("implementation is fatal: " + target)
                   deriveDefDef(tree)(_ => localTyper typed gen.mkThrowNewRuntimeException("Fatal error in code generation: this should never be called."))
               }
 
