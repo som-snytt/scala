@@ -1,23 +1,28 @@
 
-package p {
+import reflect.ClassTag
 
-  trait T[A]
+package p {
 
   class X {
     override def toString() = "p.X"
-  }
-  object X {
-    implicit val tx: T[X] = new T[X] { }
   }
 
   package q {
     import r.X
     object Test {
-      implicitly[T[X]]   // ambiguous
+      def f = implicitly[ClassTag[X]]   // ambiguous
     }
   }
 
   package r {
-    class X
+    class X {
+      override def toString() = "p.r.X"
+    }
+  }
+
+  object Test {
+    def main(args: Array[String]) = println {
+      p.q.Test.f
+    }
   }
 }
