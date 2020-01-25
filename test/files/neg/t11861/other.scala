@@ -1,0 +1,4 @@
+package foreign
+
+class C
+
