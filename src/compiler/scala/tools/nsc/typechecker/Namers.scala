@@ -544,29 +544,6 @@ trait Namers extends MethodSynthesis {
       val Import(expr, selectors) = tree
       val base = expr.tpe
 
-      // warn proactively if specific import loses to definition in scope,
-      // since it may result in desired implicit not imported into scope.
-      def checkNotRedundant(pos: Position, from: Name, to0: Name): Unit = {
-        def check(to: Name): Unit = {
-          val e = context.scope.lookupEntry(to)
-
-          if (e != null && e.owner == context.scope && e.sym.exists) {
-            if (!context.isPackageOwnedInDifferentUnit(e.sym))
-              typer.permanentlyHiddenWarning(pos, to0, e.sym)
-          } else if (context ne context.enclClass) {
-            val defSym = context.prefix.member(to) filter (
-              sym => sym.exists && context.isAccessible(sym, context.prefix, superAccess = false))
-
-            defSym andAlso (typer.permanentlyHiddenWarning(pos, to0, _))
-          }
-        }
-        if (!tree.symbol.isSynthetic && expr.symbol != null && !expr.symbol.isInterpreterWrapper) {
-          if (base.member(from) != NoSymbol)
-            check(to0)
-          if (base.member(from.toTypeName) != NoSymbol)
-            check(to0.toTypeName)
-        }
-      }
       def checkSelector(s: ImportSelector) = {
         val ImportSelector(from, fromPos, to, _) = s
         def isValid(original: Name, base: Type) =
@@ -579,17 +556,6 @@ trait Namers extends MethodSynthesis {
             || isValid(from, base.companion)                              // - importing type members from types
           )
           if (!okay) typer.TyperErrorGen.NotAMemberError(tree, expr, from, context.outer)
-
-          // Setting the position at the import means that if there is
-          // more than one hidden name, the second will not be warned.
-          // So it is the position of the actual hidden name.
-          //
-          // Note: java imports have precedence over definitions in the same package
-          //       so don't warn for them. There is a corresponding special treatment
-          //       in the shadowing rules in typedIdent to (scala/bug#7232). In any case,
-          //       we shouldn't be emitting warnings for .java source files.
-          if (!context.unit.isJava)
-            checkNotRedundant(tree.pos withPoint fromPos, from, to)
         }
       }
       selectors foreach checkSelector

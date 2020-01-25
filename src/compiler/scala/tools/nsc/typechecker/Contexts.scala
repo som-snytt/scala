@@ -1102,6 +1102,7 @@ trait Contexts { self: Analyzer =>
             case Some(is) =>
               implicitsRunId = currentRunId
               implicitsCache = is
+              println(s"Collected implicits $is")
               withOuter(is)
           }
         }
@@ -1513,7 +1514,18 @@ trait Contexts { self: Analyzer =>
         cx     = cx0
       }
 
-      if (preferDef) impSym = NoSymbol else defSym = NoSymbol
+      @inline def ignoreImport(): Unit =
+        if (impSym != NoSymbol) {
+          println(s"Ignoring imported $impSym")
+          impSym = NoSymbol
+        }
+      @inline def ignoreDefinition(): Unit =
+        if (defSym != NoSymbol) {
+          println(s"Ignoring definition $defSym")
+          defSym = NoSymbol
+        }
+
+      if (preferDef) ignoreImport() else ignoreDefinition()
 
       // At this point only one or the other of defSym and impSym might be set.
       if (defSym.exists) finishDefSym(defSym, pre)
