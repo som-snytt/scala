@@ -1,3 +1,4 @@
+// scalac: -Xlint -Werror
 package foreign
 
 object Util {
