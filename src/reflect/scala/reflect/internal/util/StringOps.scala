@@ -15,7 +15,7 @@ package reflect
 package internal
 package util
 
-import java.lang.System.{lineSeparator => EOL}
+import java.lang.System.lineSeparator
 
 /** This object provides utility methods to extract elements
  *  from Strings.
@@ -46,7 +46,7 @@ trait StringOps {
     else s.substring(0, end)
   }
   /** Breaks the string into lines and strips each line before reassembling. */
-  def trimAllTrailingSpace(s: String): String = s.linesIterator.map(trimTrailingSpace).mkString(EOL)
+  def trimAllTrailingSpace(s: String): String = s.linesIterator.map(trimTrailingSpace).mkString(lineSeparator)
 
   def decompose(str: String, sep: Char): List[String] = {
     def ws(start: Int): List[String] =
@@ -64,6 +64,8 @@ trait StringOps {
 
   def splitWhere(str: String, f: Char => Boolean, doDropIndex: Boolean = false): Option[(String, String)] =
     splitAt(str, str indexWhere f, doDropIndex)
+
+  def splitAround(str: String, idx: Int): Option[(String, String)] = splitAt(str, idx, doDropIndex = true)
 
   def splitAt(str: String, idx: Int, doDropIndex: Boolean = false): Option[(String, String)] =
     if (idx == -1) None

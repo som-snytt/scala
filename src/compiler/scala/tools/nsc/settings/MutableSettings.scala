@@ -22,6 +22,7 @@ import scala.collection.mutable.Clearable
 import scala.io.Source
 import scala.reflect.internal.util.{SomeOfNil, StringOps}
 import scala.reflect.{ClassTag, classTag}
+import scala.util.chaining._
 
 /** A mutable Settings object.
  */
@@ -129,10 +130,8 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
       args: List[String],
       setter: (Setting) => (List[String] => Option[List[String]])
     ): Option[List[String]] =
-      lookupSetting(cmd) match {
-        //case None       => errorFn("Parameter '" + cmd + "' is not recognised by Scalac.") ; None
-        case None       => None //error reported in processArguments
-        case Some(cmd)  => setter(cmd)(args)
+      lookupSetting(cmd) flatMap {
+        case cmd => setter(cmd)(args)
       }
 
     // -Xfoo: clears Clearables
@@ -149,9 +148,20 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
       if (s endsWith ":") {
         clearIfExists(s.init)
       } else {
-        StringOps.splitWhere(s, _ == ':', doDropIndex = true).flatMap {
+        import StringOps.splitWhere
+        def splitColon(sc: String) = splitWhere(sc, _ == ':', doDropIndex = true)
+        splitColon(s).flatMap {
           case (p, args) =>
-            tryToSetIfExists(p, (args split ",").toList, (s: Setting) => s.tryToSetColon(_))
+            if (args.contains(":")) {
+              val Some((sub, rest)) = splitColon(args)
+              tryToSetIfExists(p, List(sub), (s: Setting) => x =>
+                s.tryToSetColon(x).tap(_ => s match {
+                  case mcs: MultiChoiceSetting[_] if rest.nonEmpty => mcs.add(sub, rest.split(",").toList)
+                  case _ =>
+                })
+              )
+            } else
+              tryToSetIfExists(p, args.split(",").toList, (s: Setting) => s.tryToSetColon(_))
         }
       }
 
@@ -587,7 +597,9 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
    * not present in the multiChoiceSetting.value set, only their expansion.
    */
   abstract class MultiChoiceEnumeration extends Enumeration {
-    case class Choice(name: String, help: String = "", expandsTo: List[Choice] = Nil) extends Val(name)
+    case class Choice(name: String, help: String = "", expandsTo: List[Choice] = Nil) extends Val(name) {
+      var selections: List[String] = Nil
+    }
     def wildcardChoices: ValueSet = values.filter { case c: Choice => c.expandsTo.isEmpty case _ => true }
   }
 
@@ -700,6 +712,9 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
         compute()
     }
 
+    def add(arg: String, selections: List[String]): Unit =
+      domain.withName(arg).asInstanceOf[domain.Choice].selections ++= selections
+
     def tryToSet(args: List[String])                  = tryToSetArgs(args, halting = true)
     override def tryToSetColon(args: List[String])    = tryToSetArgs(args, halting = false)
     override def tryToSetFromPropertyValue(s: String) = tryToSet(s.trim.split(',').toList) // used from ide
@@ -708,6 +723,10 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
      *  The "halting" parameter means args were "-option a b c -else" so halt
      *  on "-else" or other non-choice. Otherwise, args were "-option:a,b,c,d",
      *  so process all and report non-choices as errors.
+     *
+     *  If a choice is seen as colonated, then set the choice selections:
+     *  "-option:choice:selection1,selection2"
+     *
      *  @param args args to process
      *  @param halting stop on non-arg
      */
@@ -764,7 +783,8 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
       choices.zipAll(descriptions, "", "").map(describe).mkString(f"${descr}%n", f"%n", orelse)
     }
 
-    def clear(): Unit         = {
+    def clear(): Unit = {
+      domain.values.foreach { case c: domain.Choice => c.selections = Nil ; case _ => }
       v = domain.ValueSet.empty
       yeas = domain.ValueSet.empty
       nays = domain.ValueSet.empty

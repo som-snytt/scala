@@ -112,7 +112,7 @@ class SettingsTest {
     def check(args: String*)(t: s.MultiChoiceSetting[mChoices.type] => Boolean): Boolean = {
       m.clear()
       val (ok, rest) = s.processArguments(args.toList, processAll = true)
-      assert(rest.isEmpty)
+      assertTrue(rest.isEmpty)
       t(m)
     }
 
@@ -206,7 +206,8 @@ class SettingsTest {
     def check(args: String*)(t: s.MultiChoiceSetting[mChoices.type] => Boolean): Boolean = {
       m.clear()
       val (ok, rest) = s.processArguments(args.toList, processAll = true)
-      assert(rest.isEmpty)
+      assertTrue(ok)
+      assertTrue(rest.isEmpty)
       t(m)
     }
 
@@ -232,8 +233,31 @@ class SettingsTest {
   }
   @Test def `kill switch can be enabled explicitly`(): Unit = {
     val settings = new Settings()
-    settings.processArguments("-opt:inline,l:none" :: Nil, true)
+    settings.processArguments("-opt:inline,none" :: Nil, true)
     assertTrue("has the choice", settings.opt.contains(settings.optChoices.inline))
     assertFalse("is not enabled", settings.optInlinerEnabled)
+  }
+  @Test def `choices can be multichoices`(): Unit = {
+    val s = new MutableSettings(msg => throw new IllegalArgumentException(msg))
+    object mChoices extends s.MultiChoiceEnumeration {
+      val a = Choice("a")
+      val b = Choice("b")
+      val c = Choice("c")
+      val d = Choice("d")
+    }
+    val m = s.MultiChoiceSetting("-m", "args", "magic sauce", mChoices, Some(List("a")))
+
+    def check(args: String*)(t: s.MultiChoiceSetting[mChoices.type] => Boolean): Boolean = {
+      m.clear()
+      val (ok, rest) = s.processArguments(args.toList, processAll = true)
+      assertTrue(ok)
+      assertTrue(rest.isEmpty)
+      t(m)
+    }
+
+    import mChoices._
+
+    assertTrue(check("-m:a:aval")(choices => choices.value == Set(a) && choices.value.toList.head.asInstanceOf[mChoices.Choice].selections == List("aval")))
+    assertTrue(check("-m:a:aval1,aval2")(choices => choices.value == Set(a) && choices.value.toList.head.asInstanceOf[mChoices.Choice].selections == List("aval1", "aval2")))
   }
 }

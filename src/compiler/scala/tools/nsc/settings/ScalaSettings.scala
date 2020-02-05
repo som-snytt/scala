@@ -293,9 +293,9 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
     val allowSkipClassLoading   = Choice("allow-skip-class-loading",    "Allow optimizations that can skip or delay class loading.")
     val inline                  = Choice("inline",                      "Inline method invocations according to -Yopt-inline-heuristics and -opt-inline-from.")
 
-    // l:none is not an expanding option, unlike the other l: levels. But it is excluded from -opt:_ below.
-    val lNone = Choice("l:none",
-      "Disable optimizations. Takes precedence: `-opt:l:none,+box-unbox` / `-opt:l:none -opt:box-unbox` don't enable box-unbox.")
+    // none is not an expanding option, unlike the other l: levels. But it is excluded from -opt:_ below.
+    val lNone = Choice("none",
+      "Disable optimizations. Takes precedence: `-opt:none,+box-unbox` / `-opt:none -opt:box-unbox` don't enable box-unbox.")
 
     private val defaultChoices = List(unreachableCode)
     val lDefault = Choice(
@@ -314,7 +314,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
       "Enable cross-method optimizations (note: inlining requires -opt-inline-from): " + inlineChoices.mkString("", ",", "."),
       expandsTo = inlineChoices)
 
-    // "l:none" is excluded from wildcard expansion so that -opt:_ does not disable all settings
+    // "none" is excluded from wildcard expansion so that -opt:_ does not disable all settings
     override def wildcardChoices = super.wildcardChoices.filter(_ ne lNone)
   }
 
