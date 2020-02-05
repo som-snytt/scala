@@ -21,7 +21,7 @@ import java.lang.{ Class => jClass }
  * field. This is particularly useful for instantiating `Array`s whose element types are unknown
  * at compile time.
  *
- * `ClassTag`s are a weaker special case of [[scala.reflect.api.TypeTags#TypeTag]]s, in that they
+ * `ClassTag`s are a weaker special case of [[scala.reflect.api.TypeTags.TypeTag]]s, in that they
  * wrap only the runtime class of a given type, whereas a `TypeTag` contains all static type
  * information. That is, `ClassTag`s are constructed from knowing only the top-level class of a
  * type, without necessarily knowing all of its argument types. This runtime information is enough
@@ -30,7 +30,7 @@ import java.lang.{ Class => jClass }
  * For example:
  * {{{
  *   scala> def mkArray[T : ClassTag](elems: T*) = Array[T](elems: _*)
- *   mkArray: [T](elems: T*)(implicit evidence$1: scala.reflect.ClassTag[T])Array[T]
+ *   mkArray: [T](elems: T*)(implicit evidence\$1: scala.reflect.ClassTag[T])Array[T]
  *
  *   scala> mkArray(42, 13)
  *   res0: Array[Int] = Array(42, 13)

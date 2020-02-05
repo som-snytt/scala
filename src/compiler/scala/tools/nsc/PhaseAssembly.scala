@@ -13,6 +13,7 @@
 package scala.tools.nsc
 
 import scala.collection.mutable
+import scala.language.postfixOps
 
 /** Converts an unordered morass of components into an order that
  *  satisfies their mutual constraints.
@@ -25,7 +26,7 @@ trait PhaseAssembly {
    * Aux data structure for solving the constraint system
    * The dependency graph container with helper methods for node and edge creation
    */
-  private class DependencyGraph {
+  private[nsc] class DependencyGraph {
 
     /** Simple edge with to and from refs */
     case class Edge(var frm: Node, var to: Node, var hard: Boolean)
@@ -103,24 +104,37 @@ trait PhaseAssembly {
     /* Test if there are cycles in the graph, assign levels to the nodes
      * and collapse hard links into nodes
      */
-    def collapseHardLinksAndLevels(node: Node, lvl: Int): Unit = {
+    def collapseHardLinksAndLevels(node: Node, lvl: Int) {
       if (node.visited) {
         dump("phase-cycle")
         throw new FatalError(s"Cycle in phase dependencies detected at ${node.phasename}, created phase-cycle.dot")
       }
 
-      if (node.level < lvl) node.level = lvl
-
-      var hls = Nil ++ node.before.filter(_.hard)
-      while (hls.size > 0) {
-        for (hl <- hls) {
-          node.phaseobj = Some(node.phaseobj.get ++ hl.frm.phaseobj.get)
-          node.before = hl.frm.before
-          nodes -= hl.frm.phasename
-          edges -= hl
-          for (edge <- node.before) edge.to = node
+      val initLevel = node.level
+      val levelUp = initLevel < lvl
+      if (levelUp) {
+        node.level = lvl
+      }
+      if (initLevel != 0) {
+        if (!levelUp) {
+          // no need to revisit
+          node.visited = false
+          return
         }
-        hls = Nil ++ node.before.filter(_.hard)
+      }
+      var befores = node.before
+      def hasHardLinks() = befores.exists(_.hard)
+      while (hasHardLinks()) {
+        for (hl <- befores) {
+          if (hl.hard) {
+            node.phaseobj = Some(node.phaseobj.get ++ hl.frm.phaseobj.get)
+            node.before = hl.frm.before
+            nodes -= hl.frm.phasename
+            edges -= hl
+            for (edge <- node.before) edge.to = node
+          }
+        }
+        befores = node.before
       }
       node.visited = true
 
@@ -152,7 +166,7 @@ trait PhaseAssembly {
           val sanity = Nil ++ hl.to.before.filter(_.hard)
           if (sanity.length == 0) {
             throw new FatalError("There is no runs right after dependency, where there should be one! This is not supposed to happen!")
-          } else if (sanity.lengthIs > 1) {
+          } else if (sanity.length > 1) {
             dump("phase-order")
             val following = (sanity map (_.frm.phasename)).sorted mkString ","
             throw new FatalError(s"Multiple phases want to run right after ${sanity.head.to.phasename}; followers: $following; created phase-order.dot")
@@ -233,7 +247,7 @@ trait PhaseAssembly {
   /** Given the phases set, will build a dependency graph from the phases set
    *  Using the aux. method of the DependencyGraph to create nodes and edges.
    */
-  private def phasesSetToDepGraph(phsSet: mutable.HashSet[SubComponent]): DependencyGraph = {
+  private[nsc] def phasesSetToDepGraph(phsSet: Iterable[SubComponent]): DependencyGraph = {
     val graph = new DependencyGraph()
 
     for (phs <- phsSet) {
@@ -274,7 +288,7 @@ trait PhaseAssembly {
    * file showing its structure.
    * Plug-in supplied phases are marked as green nodes and hard links are marked as blue edges.
    */
-  private def graphToDotFile(graph: DependencyGraph, filename: String): Unit = {
+  private def graphToDotFile(graph: DependencyGraph, filename: String) {
     val sbuf = new StringBuilder
     val extnodes = new mutable.HashSet[graph.Node]()
     val fatnodes = new mutable.HashSet[graph.Node]()

@@ -66,6 +66,13 @@ sealed abstract class Stream[+A] extends AbstractSeq[A]
     }
   }
 
+  @tailrec
+  override final def find(p: A => Boolean): Option[A] = {
+    if(isEmpty) None
+    else if(p(head)) Some(head)
+    else tail.find(p)
+  }
+
   override def take(n: Int): Stream[A] = {
     if (n <= 0 || isEmpty) Stream.empty
     else if (n == 1) new Stream.Cons(head, Stream.empty)
@@ -167,23 +174,23 @@ sealed abstract class Stream[+A] extends AbstractSeq[A]
     if (isEmpty) iterableFactory.empty
     else cons(f(head), tail.map(f))
 
-  override final def collect[B](pf: PartialFunction[A, B]): Stream[B] = {
-    // this implementation avoids:
-    // 1) stackoverflows (could be achieved with tailrec, too)
-    // 2) out of memory errors for big streams (`this` reference can be eliminated from the stack)
-    var rest: Stream[A] = coll
+  @tailrec override final def collect[B](pf: PartialFunction[A, B]): Stream[B] =
+    if(isEmpty) Stream.empty
+    else {
+      var newHead: B = null.asInstanceOf[B]
+      val runWith = pf.runWith((b: B) => newHead = b)
+      if(runWith(head)) Stream.collectedTail(newHead, this, pf)
+      else tail.collect(pf)
+    }
 
-    // Avoids calling both `pf.isDefined` and `pf.apply`.
-    var newHead: B = null.asInstanceOf[B]
-    val runWith = pf.runWith((b: B) => newHead = b)
-
-    while (rest.nonEmpty && !runWith(rest.head)) rest = rest.tail
-
-    //  without the call to the companion object, a thunk is created for the tail of the new stream,
-    //  and the closure of the thunk will reference `this`
-    if (rest.isEmpty) iterableFactory.empty
-    else Stream.collectedTail(newHead, rest, pf)
-  }
+  @tailrec override final def collectFirst[B](pf: PartialFunction[A, B]): Option[B] =
+    if(isEmpty) None
+    else {
+      var newHead: B = null.asInstanceOf[B]
+      val runWith = pf.runWith((b: B) => newHead = b)
+      if(runWith(head)) Some(newHead)
+      else tail.collectFirst(pf)
+    }
 
   // optimisations are not for speed, but for functionality
   // see tickets #153, #498, #2147, and corresponding tests in run/ (as well as run/stream_flatmap_odds.scala)
@@ -371,13 +378,21 @@ object Stream extends SeqFactory[Stream] {
 
   @SerialVersionUID(3L)
   final class Cons[A](override val head: A, tl: => Stream[A]) extends Stream[A] {
-    private[this] var tlEvaluated: Boolean = false
     override def isEmpty: Boolean = false
-    override lazy val tail: Stream[A] = {
-      tlEvaluated = true
-      tl
+    @volatile private[this] var tlVal: Stream[A] = _
+    @volatile private[this] var tlGen = () => tl
+    protected def tailDefined: Boolean = tlGen eq null
+    override def tail: Stream[A] = {
+      if (!tailDefined)
+        synchronized {
+          if (!tailDefined) {
+            tlVal = tlGen()
+            tlGen = null
+          }
+        }
+      tlVal
     }
-    protected def tailDefined: Boolean = tlEvaluated
+
     /** Forces evaluation of the whole `Stream` and returns it.
       *
       * @note Often we use `Stream`s to represent an infinite set or series.  If

@@ -84,4 +84,19 @@ class HashMapBenchmark {
       i += 1
     }
   }
+
+  @Benchmark def updateWith(bh: Blackhole): Unit = {
+    var i = 0;
+    while (i < size) {
+      val res = i % 4 match {
+        case 0 => map.updateWith(existingKeys(i % existingKeys.length))(_ => None)
+        case 1 => map.updateWith(existingKeys(i % existingKeys.length))(_ => Some(existingKeys(i % existingKeys.length)))
+
+        case 2 => map.updateWith(missingKeys(i % missingKeys.length))(_ => None)
+        case 3 => map.updateWith(missingKeys(i % missingKeys.length))(_ => Some(existingKeys(i % existingKeys.length)))
+      }
+      bh.consume(res)
+      i += 1
+    }
+  }
 }

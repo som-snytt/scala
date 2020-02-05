@@ -48,7 +48,7 @@ abstract class BackendUtils extends PerRunInit {
 
   /**
    * Classes with indyLambda closure instantiations where the SAM type is serializable (e.g. Scala's
-   * FunctionN) need a `$deserializeLambda$` method. This map contains classes for which such a
+   * FunctionN) need a `\$deserializeLambda\$` method. This map contains classes for which such a
    * method has been generated. It is used during ordinary code generation, as well as during
    * inlining: when inlining an indyLambda instruction into a class, we need to make sure the class
    * has the method.
@@ -335,7 +335,7 @@ abstract class BackendUtils extends PerRunInit {
   }
 
   /**
-   * Identify forwarders, aliases, anonfun$adapted methods, bridges, trivial methods (x + y), etc
+   * Identify forwarders, aliases, anonfun\$adapted methods, bridges, trivial methods (x + y), etc
    * Returns
    *   -1 : no match
    *    1 : trivial (no method calls), but not field getters
@@ -398,7 +398,7 @@ abstract class BackendUtils extends PerRunInit {
     else 4
   }
 
-  private class Collector extends NestedClassesCollector[ClassBType] {
+  private class Collector extends NestedClassesCollector[ClassBType](nestedOnly = true) {
     def declaredNestedClasses(internalName: InternalName): List[ClassBType] =
       bTypesFromClassfile.classBTypeFromParsedClassfile(internalName).info.get.nestedClasses.force
 
@@ -758,7 +758,7 @@ object BackendUtils {
     }
   }
 
-  abstract class NestedClassesCollector[T] extends GenericSignatureVisitor {
+  abstract class NestedClassesCollector[T](nestedOnly: Boolean) extends GenericSignatureVisitor(nestedOnly) {
     val innerClasses = mutable.Set.empty[T]
 
     def declaredNestedClasses(internalName: InternalName): List[T]
@@ -887,30 +887,28 @@ object BackendUtils {
     }
   }
 
-  abstract class GenericSignatureVisitor {
+  abstract class GenericSignatureVisitor(nestedOnly: Boolean) {
     final def visitInternalName(internalName: String): Unit = visitInternalName(internalName, 0, if (internalName eq null) 0 else internalName.length)
     def visitInternalName(internalName: String, offset: Int, length: Int): Unit
 
     def raiseError(msg: String, sig: String, e: Option[Throwable] = None): Unit
 
     def visitClassSignature(sig: String): Unit = if (sig != null) {
-      val p = new Parser(sig)
+      val p = new Parser(sig, nestedOnly)
       p.safely { p.classSignature() }
     }
 
     def visitMethodSignature(sig: String): Unit = if (sig != null) {
-      val p = new Parser(sig)
+      val p = new Parser(sig, nestedOnly)
       p.safely { p.methodSignature() }
     }
 
     def visitFieldSignature(sig: String): Unit = if (sig != null) {
-      val p = new Parser(sig)
+      val p = new Parser(sig, nestedOnly)
       p.safely { p.fieldSignature() }
     }
 
-    private final class Parser(sig: String) {
-      // For performance, `Char => Boolean` is not specialized
-      private trait CharBooleanFunction { def apply(c: Char): Boolean }
+    private final class Parser(sig: String, nestedOnly: Boolean) {
 
       private var index = 0
       private val end = sig.length
@@ -981,10 +979,20 @@ object BackendUtils {
 
       @tailrec private def referenceTypeSignature(): Unit = getCurrentAndSkip() match {
         case 'L' =>
-          val names = new java.lang.StringBuilder(32)
+          var names: java.lang.StringBuilder = null
 
-          appendUntil(names, isClassNameEnd)
-          visitInternalName(names.toString)
+          val start = index
+          var seenDollar = false
+          while (!isClassNameEnd(current)) {
+            seenDollar ||= current == '$'
+            index += 1
+          }
+          if ((current == '.' || seenDollar) || !nestedOnly) {
+            // OPT: avoid allocations when only a top-level class is encountered
+            names = new java.lang.StringBuilder(32)
+            names.append(sig, start, index)
+            visitInternalName(names.toString)
+          }
           typeArguments()
 
           while (current == '.') {
@@ -1159,3 +1167,6 @@ object BackendUtils {
     }
   }
 }
+
+// For performance (`Char => Boolean` is not specialized)
+private trait CharBooleanFunction { def apply(c: Char): Boolean }

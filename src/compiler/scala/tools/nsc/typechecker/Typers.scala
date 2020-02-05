@@ -462,7 +462,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
      *  packageOk is equal false when qualifying class symbol
      */
     def qualifyingClass(tree: Tree, qual: Name, packageOK: Boolean, immediate: Boolean) =
-      context.enclClass.owner.ownerChain.find(o => qual.isEmpty || o.isClass && o.name == qual) match {
+      context.enclClass.owner.ownersIterator.find(o => qual.isEmpty || o.isClass && o.name == qual) match {
         case Some(c) if packageOK || !c.isPackageClass => c
         case _ =>
           QualifyingClassError(tree, qual)
@@ -1681,7 +1681,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             if (preSuperVals.isEmpty && preSuperStats.nonEmpty)
             devWarning("Wanted to zip empty presuper val list with " + preSuperStats)
             else
-            map2(preSuperStats, preSuperVals)((ldef, gdef) => gdef.tpt setType ldef.symbol.tpe)
+            foreach2(preSuperStats, preSuperVals)((ldef, gdef) => gdef.tpt setType ldef.symbol.tpe)
 
           if (superCall1 == cunit) EmptyTree
           else cbody2 match { // ???
@@ -2436,9 +2436,6 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
           case _                                        => ()
         }
 
-      if (tdef.symbol.isDeferred && tdef.symbol.info.isHigherKinded)
-        checkFeature(tdef.pos, currentRun.runDefinitions.HigherKindsFeature)
-
       treeCopy.TypeDef(tdef, typedMods, tdef.name, tparams1, rhs1) setType NoType
     }
 
@@ -2648,11 +2645,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
      *
      *  `param => sel match { cases }` becomes:
      *
-     *  new AbstractPartialFunction[$argTp, $matchResTp] {
-     *    def applyOrElse[A1 <: $argTp, B1 >: $matchResTp]($param: A1, default: A1 => B1): B1 =
-     *       $selector match { $cases }
-     *    def isDefinedAt(x: $argTp): Boolean =
-     *       $selector match { $casesTrue }
+     *  new AbstractPartialFunction[\$argTp, \$matchResTp] {
+     *    def applyOrElse[A1 <: \$argTp, B1 >: \$matchResTp](\$param: A1, default: A1 => B1): B1 =
+     *       \$selector match { \$cases }
+     *    def isDefinedAt(x: \$argTp): Boolean =
+     *       \$selector match { \$casesTrue }
      *  }
      *
      * TODO: it would be nicer to generate the tree specified above at once and type it as a whole,
@@ -2884,12 +2881,12 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       * where `S` is the expected type that defines a single abstract method (call it `apply` for the example),
       * that has signature `(p1: T1', ..., pN: TN'): T'`, synthesize the instantiation of the following anonymous class
       *
-      * ```
+      * {{{
       *   new S {
-      *    def apply$body(p1: T1, ..., pN: TN): T = body
-      *    def apply(p1: T1', ..., pN: TN'): T' = apply$body(p1,..., pN)
+      *    def apply\$body(p1: T1, ..., pN: TN): T = body
+      *    def apply(p1: T1', ..., pN: TN'): T' = apply\$body(p1,..., pN)
       *   }
-      * ```
+      * }}}
       *
       * The `apply` method is identified by the argument `sam`; `S` corresponds to the argument `pt`,
       * If `pt` is not fully defined, we derive `samClassTpFullyDefined` by inferring any unknown type parameters.

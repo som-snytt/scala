@@ -219,4 +219,74 @@ class VectorTest {
       assertArrayEquals(s"<${v2.length}>.slice($j, $k)", v2.toArray.slice(j, k), v2.iterator.slice(j, k).toArray)
     }
   }
+
+  @Test
+  def t11600(): Unit = {
+    locally {
+      abstract class Base
+      class Derived1 extends Base
+      class Derived2 extends Base
+      val d1 = new Derived1
+      val d2 = new Derived2
+
+      locally {
+        val arraySeq = ArraySeq(d1)
+        val vector = Vector(arraySeq: _*)
+        assertEquals(arraySeq, ArraySeq(d1)) // ensure arraySeq is not mutated
+        assertEquals(vector.updated(0, d2), Vector(d2))
+      }
+
+      locally {
+        val list = List(d1)
+        val vector = Vector.from(list)
+        assertEquals(list, vector)
+        assertEquals(List(d2), vector.updated(0, d2))
+      }
+    }
+
+    locally {
+      // ensure boxing logic works:
+      val arraySeq = ArraySeq(1,2,3,4,5)
+      val vector = Vector(arraySeq: _*)
+
+      assertEquals(1 to 5, vector)
+      assertEquals(vector.updated(0, 20), Vector(20,2,3,4,5))
+      assertEquals(vector.updated(0, ""), Vector("",2,3,4,5))
+      assertEquals(1 to 5, arraySeq) // ensure arraySeq is not mutated
+    }
+    locally {
+      // ensure boxing logic works:
+      val arr = Array(1)
+      val vector = Vector.from(arr)
+      assertEquals(arr.toList, vector)
+      assertEquals(List(20), vector.updated(0, 20))
+      assertEquals(List(""), vector.updated(0, ""))
+    }
+  }
+
+  def t11636(): Unit = {
+    val a: Vector[String] = "O" +: Iterator.continually("E").take(2101).foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val a0: ArraySeq[String] = ArraySeq("O") ++ Iterator.continually("E").take(2101) ++ ArraySeq("C")
+
+    val b: Vector[String] = "O" +: Iterator.continually("E").take(223) .foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val b0: ArraySeq[String] = ArraySeq("O") ++ Iterator.continually("E").take(223) ++ ArraySeq("C")
+
+    val c: Vector[String] = "O" +: Iterator.continually("E").take(135) .foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val c0: ArraySeq[String] = ArraySeq("O") ++ Iterator.continually("E").take(135) ++ ArraySeq("C")
+
+    val d: Vector[String] = "O" +: Iterator.continually("E").take(0)   .foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val d0: ArraySeq[String] = ArraySeq("O", "C")
+
+    val e: Vector[String] = "O" +: Iterator.continually("E").take(376) .foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val e0: ArraySeq[String] = ArraySeq("O") ++ Iterator.continually("E").take(376) ++ ArraySeq("C")
+
+    val f: Vector[String] = "O" +: Iterator.continually("E").take(365) .foldLeft(Vector.empty[String])((v, e) => v :+ e) :+ "C"
+    val f0: ArraySeq[String] = ArraySeq("O") ++ Iterator.continually("E").take(365) ++ ArraySeq("C")
+
+    assertEquals(a0 ++ b0, a ++ b)
+    assertEquals(a0 ++ b0 ++ c0, a ++ b ++ c)
+    assertEquals(a0 ++ b0 ++ c0 ++ d0, a ++ b ++ c ++ d)
+    assertEquals(a0 ++ b0 ++ c0 ++ d0 ++ e0, a ++ b ++ c ++ d ++ e)
+    assertEquals(a0 ++ b0 ++ c0 ++ d0 ++ e0 ++ f0, a ++ b ++ c ++ d ++ e ++ f)
+  }
 }

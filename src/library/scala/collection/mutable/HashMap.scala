@@ -106,6 +106,57 @@ class HashMap[K, V](initialCapacity: Int, loadFactor: Double)
     }
   }
 
+  // Override updateWith for performance, so we can do the update while hashing
+  // the input key only once and performing one lookup into the hash table
+  override def updateWith(key: K)(remappingFunction: Option[V] => Option[V]): Option[V] = {
+    if (getClass != classOf[HashMap[_, _]]) {
+      // subclasses of HashMap might customise `get` ...
+      super.updateWith(key)(remappingFunction)
+    } else {
+      val hash = computeHash(key)
+      val indexedHash = index(hash)
+
+      var foundNode: Node[K, V] = null
+      var previousNode: Node[K, V] = null
+      table(indexedHash) match {
+        case null =>
+        case nd =>
+          @tailrec
+          def findNode(prev: Node[K, V], nd: Node[K, V], k: K, h: Int): Unit = {
+            if (h == nd.hash && k == nd.key) {
+              previousNode = prev
+              foundNode = nd
+            }
+            else if ((nd.next eq null) || (nd.hash > h)) ()
+            else findNode(nd, nd.next, k, h)
+          }
+
+          findNode(null, nd, key, hash)
+      }
+
+      val previousValue = foundNode match {
+        case null => None
+        case nd => Some(nd.value)
+      }
+
+      val nextValue = remappingFunction(previousValue)
+
+      (previousValue, nextValue) match {
+        case (None, None) => // do nothing
+
+        case (Some(_), None) =>
+          if (previousNode != null) previousNode.next = foundNode.next
+          else table(indexedHash) = foundNode.next
+          contentSize -= 1
+
+        case (None, Some(value)) => put0(key, value, false, hash, indexedHash)
+
+        case (Some(_), Some(newValue)) => foundNode.value = newValue
+      }
+      nextValue
+    }
+  }
+
   override def subtractAll(xs: IterableOnce[K]): this.type = {
     if (size == 0) {
       return this
@@ -452,6 +503,21 @@ class HashMap[K, V](initialCapacity: Int, loadFactor: Double)
         table(bucket) = head
         bucket += 1
       }
+    }
+    this
+  }
+
+  // TODO in 2.14: rename to `mapValuesInPlace` and override the base version (not binary compatible)
+  private[mutable] def mapValuesInPlaceImpl(f: (K, V) => V): this.type = {
+    val len = table.length
+    var i = 0
+    while (i < len) {
+      var n = table(i)
+      while (n ne null) {
+        n.value = f(n.key, n.value)
+        n = n.next
+      }
+      i += 1
     }
     this
   }

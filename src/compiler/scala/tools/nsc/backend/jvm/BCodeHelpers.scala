@@ -63,10 +63,10 @@ abstract class BCodeHelpers extends BCodeIdiomatic {
 
   def needsStaticImplMethod(sym: Symbol) = sym.hasAttachment[global.mixer.NeedStaticImpl.type]
 
-  final def traitSuperAccessorName(sym: Symbol): Name = {
+  final def traitSuperAccessorName(sym: Symbol): String = {
     val name = sym.javaSimpleName
-    if (sym.isMixinConstructor) name
-    else name.append(nme.NAME_JOIN_STRING)
+    if (sym.isMixinConstructor) name.toString
+    else name + nme.NAME_JOIN_STRING
   }
 
   /**
@@ -245,9 +245,10 @@ abstract class BCodeHelpers extends BCodeIdiomatic {
       sym.isErroneous
     }
 
+  private lazy val noReporter = new NoReporter(settings)
   @inline private def withoutReporting[T](fn : => T) = {
     val currentReporter = reporter
-    reporter = NoReporter
+    reporter = noReporter
     try fn finally reporter = currentReporter
   }
 
@@ -468,7 +469,7 @@ abstract class BCodeHelpers extends BCodeIdiomatic {
 
     /**
      * Annotations are not processed by the compilation pipeline like ordinary trees. Instead, the
-     * typer extracts them into [[AnnotationInfo]] objects which are attached to the corresponding
+     * typer extracts them into [[scala.reflect.internal.AnnotationInfos.AnnotationInfo]] objects which are attached to the corresponding
      * symbol (sym.annotations) or type (as an AnnotatedType, eliminated by erasure).
      *
      * For Scala annotations this is OK: they are stored in the pickle and ignored by the backend.
@@ -1066,11 +1067,11 @@ object BCodeHelpers {
 
     /**
      * The data in `bytes` mapped to 7-bit bytes and then each element incremented by 1 (modulo 0x80).
-     * This implements parts of the encoding documented in [[ByteCodecs]]. 0x00 values are NOT
+     * This implements parts of the encoding documented in [[scala.reflect.internal.pickling.ByteCodecs]]. 0x00 values are NOT
      * mapped to the overlong encoding (0xC0 0x80) but left as-is.
      * When creating a String from this array and writing it to a classfile as annotation argument
      * using ASM, the ASM library will replace 0x00 values by the overlong encoding. So the data in
-     * the classfile will have the format documented in [[ByteCodecs]].
+     * the classfile will have the format documented in [[scala.reflect.internal.pickling.ByteCodecs]].
      */
     lazy val sevenBitsMayBeZero: Array[Byte] = mapToNextModSevenBits(ByteCodecs.encode8to7(bytes))
 

@@ -17,11 +17,10 @@ import java.io.PrintWriter
 import java.net.URL
 
 import scala.reflect.ClassTag
-import scala.reflect.internal.util.{AbstractFileClassLoader, SourceFile}
-import scala.reflect.internal.util.Position
+import scala.reflect.internal.util.{AbstractFileClassLoader, Position, SourceFile}
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.Results.Result
-import scala.tools.nsc.reporters.Reporter
+import scala.tools.nsc.reporters.FilteringReporter
 
 
 /** The subset of the Repl used by sbt.
@@ -78,7 +77,6 @@ trait ReplCore {
 trait Repl extends ReplCore {
   val settings: Settings
   type Setting = settings.Setting
-  type SettingSet = scala.collection.Set[Setting]
 
   def reporter: ReplReporter
 
@@ -87,9 +85,9 @@ trait Repl extends ReplCore {
   // Apply a temporary label for compilation (for example, script name)
   def withLabel[A](temp: String)(body: => A): A
 
-  def visibleSettings: SettingSet
+  def visibleSettings: List[Setting]
 
-  def userSetSettings: SettingSet
+  def userSetSettings: List[Setting]
 
   def updateSettings(arguments: List[String]): Boolean
 
@@ -220,7 +218,7 @@ trait ScriptedRepl extends Repl {
   def addBackReferences(req: Request): Either[String, Request]
 }
 
-trait ReplReporter extends Reporter {
+trait ReplReporter extends FilteringReporter {
   def out: PrintWriter
 
   /**
@@ -239,7 +237,7 @@ trait ReplReporter extends Reporter {
     */
   def withoutTruncating[T](body: => T): T
 
-  /** Do not remove interpreter wrappers ($iw etc) from all output during the execution of `body`.
+  /** Do not remove interpreter wrappers (\$iw etc) from all output during the execution of `body`.
     */
   def withoutUnwrapping(body: => Unit): Unit
 

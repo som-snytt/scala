@@ -110,12 +110,11 @@ trait Types
   private object substTypeMapCache {
     private[this] var cached: SubstTypeMap = new SubstTypeMap(Nil, Nil)
 
-    def apply(from: List[Symbol], to: List[Type]): SubstTypeMap = {
+    def apply(from: List[Symbol], to: List[Type]): SubstTypeMap = if (isCompilerUniverse) {
       if ((cached.from ne from) || (cached.to ne to))
         cached = new SubstTypeMap(from, to)
-
       cached
-    }
+    } else new SubstTypeMap(from, to)
   }
 
   /** The current skolemization level, needed for the algorithms
@@ -274,7 +273,7 @@ trait Types
      */
     def isTrivial: Boolean = false
 
-    /** Is this type higher-kinded, i.e., is it a type constructor @M */
+    /** Is this type higher-kinded, i.e., is it a type constructor \@M */
     def isHigherKinded: Boolean = false
     def takesTypeArgs: Boolean = this.isHigherKinded
 
@@ -435,7 +434,7 @@ trait Types
       case _ => List()
     }
 
-    /** This type, without its type arguments @M */
+    /** This type, without its type arguments \@M */
     def typeConstructor: Type = this
 
     /** For a typeref, its arguments. The empty list for all other types */
@@ -481,7 +480,7 @@ trait Types
 
     /** Replace formal type parameter symbols with actual type arguments. ErrorType on arity mismatch.
      *
-     * Amounts to substitution except for higher-kinded types. (See overridden method in TypeRef) -- @M
+     * Amounts to substitution except for higher-kinded types. (See overridden method in TypeRef) -- \@M
      */
     def instantiateTypeParams(formals: List[Symbol], actuals: List[Type]): Type =
       if (sameLength(formals, actuals)) this.subst(formals, actuals) else ErrorType
@@ -1030,7 +1029,10 @@ trait Types
      *  @param stableOnly     If set, return only members that are types or stable values
      */
     def findMember(name: Name, excludedFlags: Long, requiredFlags: Long, stableOnly: Boolean): Symbol = {
-      def findMemberInternal = new FindMember(this, name, excludedFlags, requiredFlags, stableOnly).apply()
+      def findMemberInternal = findMemberInstance.using { findMember =>
+        findMember.init(this, name, excludedFlags, requiredFlags, stableOnly)
+        findMember()
+      }
 
       if (this.isGround) findMemberInternal
       else suspendingTypeVars(typeVarsInTypeRev(this))(findMemberInternal)
@@ -2226,6 +2228,10 @@ trait Types
     override def termSymbol = if (this ne normalize) normalize.termSymbol else super.termSymbol
     override def typeSymbol = if (this ne normalize) normalize.typeSymbol else sym
 
+    // Avoid calling super.isError when we're a type constructor, as that will eta-expand, which can cause spurious cycles,
+    // without resulting in additional information about our error state in any case
+    override def isError: Boolean = sym.isError || !isHigherKinded && super.isError
+
     override protected[Types] def parentsImpl: List[Type] = normalize.parents map relativize
 
     // `baseClasses` is sensitive to type args when referencing type members
@@ -2338,9 +2344,9 @@ trait Types
   /** A class for named types of the form
    *    `<prefix>.<sym.name>[args]`
    *  Cannot be created directly; one should always use `typeRef`
-   *  for creation. (@M: Otherwise hashing breaks)
+   *  for creation. (\@M: Otherwise hashing breaks)
    *
-   * @M: a higher-kinded type is represented as a TypeRef with sym.typeParams.nonEmpty, but args.isEmpty
+   * \@M: a higher-kinded type is represented as a TypeRef with sym.typeParams.nonEmpty, but args.isEmpty
    */
   abstract case class TypeRef(pre: Type, sym: Symbol, args: List[Type]) extends UniqueType with TypeRefApi {
     override def mapOver(map: TypeMap): Type = {
@@ -2799,7 +2805,7 @@ trait Types
         val len = params.length
         val paramsTpes: Array[Type] = new Array[Type](len)
 
-        // returns the result of ```params.forall(_.tpe.isTrivial))```
+        // returns the result of `params.forall(_.tpe.isTrivial))`
         // along the way, it loads each param' tpe into array
         def forallIsTrivial: Boolean = {
           var res = true
@@ -5196,7 +5202,7 @@ trait Types
 // ----- Hoisted closures and convenience methods, for compile time reductions -------
 
   private[scala] val isTypeVar = (tp: Type) => tp.isInstanceOf[TypeVar]
-  private[scala] val typeContainsTypeVar = (tp: Type) => tp exists isTypeVar
+  private[scala] val typeContainsTypeVar = { val collector = new FindTypeCollector(isTypeVar); (tp: Type) => collector.collect(tp).isDefined }
   private[scala] val typeIsNonClassType = (tp: Type) => tp.typeSymbolDirect.isNonClassType
   private[scala] val typeIsExistentiallyBound = (tp: Type) => tp.typeSymbol.isExistentiallyBound
   private[scala] val typeIsErroneous = (tp: Type) => tp.isErroneous

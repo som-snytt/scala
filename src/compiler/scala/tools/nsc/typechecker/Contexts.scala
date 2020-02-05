@@ -56,6 +56,8 @@ trait Contexts { self: Analyzer =>
     LookupAmbiguous(s"it is imported twice in the same scope by\n$imp1\nand $imp2")
   def ambiguousDefnAndImport(owner: Symbol, imp: ImportInfo) =
     LookupAmbiguous(s"it is both defined in $owner and imported subsequently by \n$imp")
+  def ambiguousDefinitions(owner: Symbol, other: Symbol) =
+    LookupAmbiguous(s"it is both defined in $owner and available as ${other.fullLocationString}")
 
   private lazy val startContext = NoContext.make(
     Template(List(), noSelfType, List()) setSymbol global.NoSymbol setType global.NoType,
@@ -208,9 +210,9 @@ trait Contexts { self: Analyzer =>
    *     applications with and without an expected type, or when `Typer#tryTypedApply` tries to fit arguments to
    *     a function type with/without implicit views.
    *
-   *     When the error policies entail error/warning buffering, the mutable [[ReportBuffer]] records
+   *     When the error policies entail error/warning buffering, the mutable [[ContextReporter]] records
    *     everything that is issued. It is important to note, that child Contexts created with `make`
-   *     "inherit" the very same `ReportBuffer` instance, whereas children spawned through `makeSilent`
+   *     "inherit" the very same `ContextReporter` instance, whereas children spawned through `makeSilent`
    *     receive a separate, fresh buffer.
    *
    * @param tree  Tree associated with this context
@@ -1312,7 +1314,7 @@ trait Contexts { self: Analyzer =>
    *  the search continuing as long as no qualifying name is found.
    */
   // OPT: moved this into a (cached) object to avoid costly and non-eliminated {Object,Int}Ref allocations
-  private[Contexts] final val symbolLookupCache = ReusableInstance[SymbolLookup](new SymbolLookup)
+  private[Contexts] final val symbolLookupCache = ReusableInstance[SymbolLookup](new SymbolLookup, enabled = true)
   private[Contexts] final class SymbolLookup {
     private[this] var lookupError: NameLookup  = _ // set to non-null if a definite error is encountered
     private[this] var inaccessible: NameLookup = _ // records inaccessible symbol for error reporting in case none is found
@@ -1410,15 +1412,17 @@ trait Contexts { self: Analyzer =>
       }
 
       // cx.scope eq null arises during FixInvalidSyms in Duplicators
-      while (defSym == NoSymbol && (cx ne NoContext) && (cx.scope ne null)) {
-        pre    = cx.enclClass.prefix
-        defSym = lookupInScope(cx.owner, cx.enclClass.prefix, cx.scope) match {
-          case NoSymbol                  => searchPrefix
-          case found                     => found
+      def nextDefinition(): Unit =
+        while (defSym == NoSymbol && (cx ne NoContext) && (cx.scope ne null)) {
+          pre    = cx.enclClass.prefix
+          defSym = lookupInScope(cx.owner, cx.enclClass.prefix, cx.scope) match {
+            case NoSymbol => searchPrefix
+            case found    => found
+          }
+          if (!defSym.exists) cx = cx.outer // push further outward
         }
-        if (!defSym.exists)
-          cx = cx.outer // push further outward
-      }
+      nextDefinition()
+
       if (symbolDepth < 0)
         symbolDepth = cx.depth
 
@@ -1458,23 +1462,49 @@ trait Contexts { self: Analyzer =>
           importCursor.advanceImp1Imp2()
       }
 
-      if (defSym.exists && impSym.exists) {
+      val preferDef: Boolean = defSym.exists && (!impSym.exists || {
         // 4) root imported symbols have same (lowest) precedence as package-owned symbols in different compilation units.
         if (imp1.depth < symbolDepth && imp1.isRootImport && foreignDefined)
-          impSym = NoSymbol
+          true
         // 4) imported symbols have higher precedence than package-owned symbols in different compilation units.
         else if (imp1.depth >= symbolDepth && foreignDefined)
-          defSym = NoSymbol
+          false
         // Defined symbols take precedence over erroneous imports.
         else if (impSym.isError || impSym.name == nme.CONSTRUCTOR)
-          impSym = NoSymbol
+          true
         // Try to reconcile them before giving up, at least if the def is not visible
         else if (foreignDefined && thisContext.reconcileAmbiguousImportAndDef(name, impSym, defSym))
-          impSym = NoSymbol
+          true
         // Otherwise they are irreconcilably ambiguous
         else
           return ambiguousDefnAndImport(defSym.alternatives.head.owner, imp1)
+      })
+
+      // If the defSym is at 4, and there is a def at 1 in scope, then the reference is ambiguous.
+      if (foreignDefined && !defSym.isPackage) {
+        val defSym0 = defSym
+        val pre0    = pre
+        val cx0     = cx
+        while ((cx ne NoContext) && cx.depth >= symbolDepth) cx = cx.outer
+        var done = false
+        while (!done) {
+          defSym = NoSymbol
+          nextDefinition()
+          done = (cx eq NoContext) || defSym.exists && !foreignDefined
+          if (!done && (cx ne NoContext)) cx = cx.outer
+        }
+        if (defSym.exists && (defSym ne defSym0)) {
+          val ambiguity =
+            if (preferDef) ambiguousDefinitions(owner = defSym.owner, defSym0)
+            else ambiguousDefnAndImport(owner = defSym.owner, imp1)
+          return ambiguity
+        }
+        defSym = defSym0
+        pre    = pre0
+        cx     = cx0
       }
+
+      if (preferDef) impSym = NoSymbol else defSym = NoSymbol
 
       // At this point only one or the other of defSym and impSym might be set.
       if (defSym.exists) finishDefSym(defSym, pre)
@@ -1542,15 +1572,18 @@ trait Contexts { self: Analyzer =>
    *
    *  To handle nested contexts, reporters share buffers. TODO: only buffer in BufferingReporter, emit immediately in ImmediateReporter
    */
-  abstract class ContextReporter(private[this] var _errorBuffer: mutable.LinkedHashSet[AbsTypeError] = null, private[this] var _warningBuffer: mutable.LinkedHashSet[(Position, String)] = null) extends Reporter {
+  abstract class ContextReporter(private[this] var _errorBuffer: mutable.LinkedHashSet[AbsTypeError] = null, private[this] var _warningBuffer: mutable.LinkedHashSet[(Position, String)] = null) {
     type Error = AbsTypeError
     type Warning = (Position, String)
 
-    def issue(err: AbsTypeError)(implicit context: Context): Unit = handleError(context.fixPosition(err.errPos), addDiagString(err.errMsg))
+    def issue(err: AbsTypeError)(implicit context: Context): Unit = error(context.fixPosition(err.errPos), addDiagString(err.errMsg))
 
-    protected def handleError(pos: Position, msg: String): Unit
+    def echo(msg: String): Unit                   = echo(NoPosition, msg)
+    def echo(pos: Position, msg: String): Unit    = reporter.echo(pos, msg)
+    def warning(pos: Position, msg: String): Unit = reporter.warning(pos, msg)
+    def error(pos: Position, msg: String): Unit
+
     protected def handleSuppressedAmbiguous(err: AbsAmbiguousTypeError): Unit = ()
-    protected def handleWarning(pos: Position, msg: String): Unit = reporter.warning(pos, msg)
 
     def makeImmediate: ContextReporter = this
     def makeBuffering: ContextReporter = this
@@ -1581,7 +1614,7 @@ trait Contexts { self: Analyzer =>
           if (target.isBuffering) {
             target ++= errors
           } else {
-            errors.foreach(e => target.handleError(e.errPos, e.errMsg))
+            errors.foreach(e => target.error(e.errPos, e.errMsg))
           }
           // TODO: is clearAllErrors necessary? (no tests failed when dropping it)
           // NOTE: even though `this ne target`, it may still be that `target.errorBuffer eq _errorBuffer`,
@@ -1593,20 +1626,13 @@ trait Contexts { self: Analyzer =>
       }
     }
 
-    protected final def info0(pos: Position, msg: String, severity: Severity, force: Boolean): Unit =
-      severity match {
-        case ERROR   => handleError(pos, msg)
-        case WARNING => handleWarning(pos, msg)
-        case INFO    => reporter.echo(pos, msg)
-      }
-
-    final override def hasErrors = super.hasErrors || (_errorBuffer != null && errorBuffer.nonEmpty)
+    final def hasErrors: Boolean = _errorBuffer != null && errorBuffer.nonEmpty
 
     // TODO: everything below should be pushed down to BufferingReporter (related to buffering)
     // Implicit relies on this most heavily, but there you know reporter.isInstanceOf[BufferingReporter]
     // can we encode this statically?
 
-    // have to pass in context because multiple contexts may share the same ReportBuffer
+    // have to pass in context because multiple contexts may share the same ContextReporter
     def reportFirstDivergentError(fun: Tree, param: Symbol, paramTp: Type)(implicit context: Context): Unit =
       errors.collectFirst {
         case dte: DivergentImplicitTypeError => dte
@@ -1616,7 +1642,7 @@ trait Contexts { self: Analyzer =>
           // no need to issue the problem again if we are still in silent mode
           if (context.reportErrors) {
             context.issue(divergent.withPt(paramTp))
-            errorBuffer.retain {
+            errorBuffer.filterInPlace {
               case dte: DivergentImplicitTypeError => false
               case _ => true
             }
@@ -1626,7 +1652,7 @@ trait Contexts { self: Analyzer =>
       }
 
     def retainDivergentErrorsExcept(saved: DivergentImplicitTypeError) =
-      errorBuffer.retain {
+      errorBuffer.filterInPlace {
         case err: DivergentImplicitTypeError => err ne saved
         case _ => false
       }
@@ -1674,7 +1700,7 @@ trait Contexts { self: Analyzer =>
 
   private[typechecker] class ImmediateReporter(_errorBuffer: mutable.LinkedHashSet[AbsTypeError] = null, _warningBuffer: mutable.LinkedHashSet[(Position, String)] = null) extends ContextReporter(_errorBuffer, _warningBuffer) {
     override def makeBuffering: ContextReporter = new BufferingReporter(errorBuffer, warningBuffer)
-    protected def handleError(pos: Position, msg: String): Unit = reporter.error(pos, msg)
+    def error(pos: Position, msg: String): Unit = reporter.error(pos, msg)
  }
 
 
@@ -1685,9 +1711,10 @@ trait Contexts { self: Analyzer =>
 
     // this used to throw new TypeError(pos, msg) -- buffering lets us report more errors (test/files/neg/macro-basic-mamdmi)
     // the old throwing behavior was relied on by diagnostics in manifestOfType
-    protected def handleError(pos: Position, msg: String): Unit                        = errorBuffer += TypeErrorWrapper(new TypeError(pos, msg))
+    def error(pos: Position, msg: String): Unit                        = errorBuffer += TypeErrorWrapper(new TypeError(pos, msg))
+    override def warning(pos: Position, msg: String): Unit             = warningBuffer += ((pos, msg))
+
     override protected def handleSuppressedAmbiguous(err: AbsAmbiguousTypeError): Unit = errorBuffer += err
-    override protected def handleWarning(pos: Position, msg: String): Unit             = warningBuffer += ((pos, msg))
 
     // TODO: emit all buffered errors, warnings
     override def makeImmediate: ContextReporter = new ImmediateReporter(errorBuffer, warningBuffer)
@@ -1699,12 +1726,12 @@ trait Contexts { self: Analyzer =>
    */
   private[typechecker] class ThrowingReporter extends ContextReporter {
     override def isThrowing = true
-    protected def handleError(pos: Position, msg: String): Unit = throw new TypeError(pos, msg)
+    def error(pos: Position, msg: String): Unit = throw new TypeError(pos, msg)
   }
 
   /** Used during a run of [[scala.tools.nsc.typechecker.TreeCheckers]]? */
   private[typechecker] class CheckingReporter extends ContextReporter {
-    protected def handleError(pos: Position, msg: String): Unit = onTreeCheckerError(pos, msg)
+    def error(pos: Position, msg: String): Unit = onTreeCheckerError(pos, msg)
   }
 
   class ImportInfo(val tree: Import, val depth: Int, val isRootImport: Boolean) {

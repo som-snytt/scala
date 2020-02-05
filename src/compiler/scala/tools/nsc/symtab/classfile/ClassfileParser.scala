@@ -208,6 +208,7 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
         (u1: @switch) match {
           case CONSTANT_UTF8 | CONSTANT_UNICODE                                => in skip u2
           case CONSTANT_CLASS | CONSTANT_STRING | CONSTANT_METHODTYPE          => in skip 2
+          case CONSTANT_MODULE | CONSTANT_PACKAGE                              => in skip 2
           case CONSTANT_METHODHANDLE                                           => in skip 3
           case CONSTANT_FIELDREF | CONSTANT_METHODREF | CONSTANT_INTFMETHODREF => in skip 4
           case CONSTANT_NAMEANDTYPE | CONSTANT_INTEGER | CONSTANT_FLOAT        => in skip 4
@@ -350,7 +351,7 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
 
     /**
      * Get an array of bytes stored in the classfile as a string. The data is encoded in the format
-     * described in object [[ByteCodecs]]. Used for the ScalaSignature annotation argument.
+     * described in object [[scala.reflect.internal.pickling.ByteCodecs]]. Used for the ScalaSignature annotation argument.
      */
     def getBytes(index: Int): Array[Byte] = {
       if (index <= 0 || len <= index) errorBadIndex(index)
@@ -367,7 +368,7 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
 
     /**
      * Get an array of bytes stored in the classfile as an array of strings. The data is encoded in
-     * the format described in object [[ByteCodecs]]. Used for the ScalaLongSignature annotation
+     * the format described in object [[scala.reflect.internal.pickling.ByteCodecs]]. Used for the ScalaLongSignature annotation
      * argument.
      */
     def getBytes(indices: List[Int]): Array[Byte] = {
@@ -873,8 +874,8 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
             // https://github.com/scala/scala/commit/7315339782f6e19ddd6199768352a91ef66eb27d
             // https://github.com/scala-ide/scala-ide/commit/786ea5d4dc44065379a05eb3ac65d37f8948c05d
             //
-            // TODO: can we disable this altogether? Does Scala-IDE actually intermingle source and classfiles in a way
-            //       that this could ever find something?
+            // TODO: Does Scala-IDE actually intermingle source and classfiles in a way that this could ever find something?
+            //       If they want to use this, they'll need to enable the new setting -Ypresentation-locate-source-file.
             val srcfileLeaf = readName().toString.trim
             val srcpath = sym.enclosingPackage match {
               case NoSymbol => srcfileLeaf

@@ -89,15 +89,71 @@ ThisBuild / headerLicense  := Some(HeaderLicense.Custom(
 Global / mimaReferenceVersion := Some("2.13.0")
 
 import com.typesafe.tools.mima.core._
-val mimaFilterSettings = Seq(
+val mimaFilterSettings = Seq {
   mimaBinaryIssueFilters ++= Seq(
     ProblemFilters.exclude[Problem]("scala.reflect.internal.*"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.runtime.JavaMirrors#JavaMirror.typeTag"),
     ProblemFilters.exclude[MissingClassProblem]("scala.reflect.runtime.JavaMirrors$JavaMirror$typeTagCache$"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.api.TypeTags.TypeTagImpl"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.api.Universe.TypeTagImpl"),
+    ProblemFilters.exclude[MissingClassProblem]("scala.reflect.macros.Attachments$"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.collection.immutable.ArraySeq.stepper"),
+    ProblemFilters.exclude[ReversedAbstractMethodProblem]("scala.collection.immutable.ArraySeq.stepper"),
+    ProblemFilters.exclude[DirectAbstractMethodProblem]("scala.collection.mutable.ArraySeq.stepper"),
+    ProblemFilters.exclude[ReversedAbstractMethodProblem]("scala.collection.mutable.ArraySeq.stepper"),
+    ProblemFilters.exclude[FinalClassProblem]("scala.collection.ArrayOps$GroupedIterator"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcB$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcZ$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcV$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcD$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcJ$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcV$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcB$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$GroupedIterator"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcF$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcC$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcF$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcS$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcI$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcC$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcJ$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcD$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ReverseIterator$mcZ$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcI$sp"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.ArrayOps$ArrayIterator$mcS$sp"),
+    ProblemFilters.exclude[FinalMethodProblem]("scala.collection.immutable.Stream.find"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.sys.process.BasicIO.connectNoOp"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.sys.process.BasicIO.connectToStdIn"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.mutable.HashTable.removeEntry0"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("scala.reflect.runtime.SynchronizedSymbols#SynchronizedSymbol.scala$reflect$runtime$SynchronizedSymbols$SynchronizedSymbol$$super$typeConstructor"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("scala.reflect.io.ZipArchive.getDir"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("scala.reflect.io.FileZipArchive.allDirs"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.io.FileZipArchive.allDirsByDottedName"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.runtime.SynchronizedSymbols#SynchronizedSymbol.typeConstructor"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem]("scala.reflect.io.ZipArchive.getDir"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem]("scala.reflect.io.FileZipArchive.allDirs"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorBuilder.nullSlotAndCopy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorBuilder.gotoPosWritable1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorBuilder.gotoPosWritable1$default$4"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorBuilder.nullSlotAndCopy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorIterator.nullSlotAndCopy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorIterator.gotoPosWritable1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorIterator.gotoPosWritable1$default$4"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorIterator.nullSlotAndCopy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.Vector.nullSlotAndCopy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.Vector.focus"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.Vector.gotoPosWritable1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.Vector.gotoPosWritable1$default$4"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.Vector.nullSlotAndCopy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.nullSlotAndCopy"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.gotoPosWritable1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.gotoPosWritable1$default$4"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.nullSlotAndCopy$default$3"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.mutable.HashMap.mapValuesInPlaceImpl"),
   ),
-)
+}
 
 // Save MiMa logs
 SavedLogs.settings
@@ -176,6 +232,19 @@ lazy val commonSettings = instanceSettings ++ clearSourceAndResourceDirectories 
   ),
   //maxErrors := 10,
   setIncOptions,
+  // http://stackoverflow.com/questions/16934488
+  apiMappings ++= {
+    Option(System.getProperty("sun.boot.class.path")).flatMap { classPath =>
+      classPath.split(java.io.File.pathSeparator).find(_.endsWith(java.io.File.separator + "rt.jar"))
+    }.map { jarPath =>
+      Map(
+        file(jarPath) -> url("https://docs.oracle.com/javase/8/docs/api")
+      )
+    }.getOrElse {
+      streams.value.log.warn("Failed to add bootstrap class path of Java to apiMappings")
+      Map.empty[File,URL]
+    }
+  },
   apiURL := Some(url("https://www.scala-lang.org/api/" + versionProperties.value.mavenVersion + "/")),
   pomIncludeRepository := { _ => false },
   pomExtra := {
@@ -627,7 +696,7 @@ lazy val bench = project.in(file("test") / "benchmarks")
 
 
 lazy val testkit = configureAsSubproject(project)
-  .dependsOn(library)
+  .dependsOn(compiler)
   .settings(Osgi.settings)
   .settings(AutomaticModuleName.settings("scala.testkit"))
   .settings(

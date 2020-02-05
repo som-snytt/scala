@@ -49,21 +49,24 @@ class BytecodeTest extends BytecodeTesting {
 
     val unapplyLineNumbers = getInstructions(module, "unapply").filter(_.isInstanceOf[LineNumber])
     assert(unapplyLineNumbers == List(LineNumber(2, Label(0))), unapplyLineNumbers)
+
     val expected = List(
       LineNumber(4, Label(0)),
-      LineNumber(5, Label(4)),
-      Jump(IFNE, Label(10)),
-      Jump(GOTO, Label(19)),
+      LineNumber(5, Label(5)),
+      Jump(IFEQ, Label(20)),
 
-      LineNumber(6, Label(10)),
+      LineNumber(6, Label(11)),
       Invoke(INVOKEVIRTUAL, "scala/Predef$", "println", "(Ljava/lang/Object;)V", false),
-      Jump(GOTO, Label(28)),
+      Jump(GOTO, Label(33)),
 
-      LineNumber(8, Label(19)),
+      LineNumber(5, Label(20)),
+      Jump(GOTO, Label(24)),
+
+      LineNumber(8, Label(24)),
       Invoke(INVOKEVIRTUAL, "scala/Predef$", "println", "(Ljava/lang/Object;)V", false),
-      Jump(GOTO, Label(28)),
+      Jump(GOTO, Label(33)),
 
-      LineNumber(10, Label(28)),
+      LineNumber(10, Label(33)),
       Invoke(INVOKEVIRTUAL, "scala/Predef$", "println", "(Ljava/lang/Object;)V", false)
     )
 
@@ -306,5 +309,29 @@ class BytecodeTest extends BytecodeTesting {
       case f: Field => f.name
     }
     assertEquals(List("$outer", "x$1", "y$1"), assignedInConstr.sorted)
+  }
+
+  @Test
+  def t11641(): Unit = {
+    val code =
+      """class B { val b = 0 }
+        |class C extends DelayedInit {
+        |  def delayedInit(body: => Unit): Unit = ()
+        |}
+        |class D extends DelayedInit {
+        |  val d = 0
+        |  def delayedInit(body: => Unit): Unit = ()
+        |}
+        |class E extends C {
+        |  val e = 0
+        |}
+        |class F extends D
+      """.stripMargin
+    val cs = compileClasses(code, allowMessage = _.msg.contains("there were two deprecation warnings"))
+    assertDoesNotInvoke(getMethod(cs.find(_.name == "B").get, "<init>"), "releaseFence")
+    assertDoesNotInvoke(getMethod(cs.find(_.name == "C").get, "<init>"), "releaseFence")
+    assertInvoke(getMethod(cs.find(_.name == "D").get, "<init>"), "scala/runtime/Statics", "releaseFence")
+    assertInvoke(getMethod(cs.find(_.name == "E").get, "<init>"), "scala/runtime/Statics", "releaseFence")
+    assertDoesNotInvoke(getMethod(cs.find(_.name == "F").get, "<init>"), "releaseFence")
   }
 }

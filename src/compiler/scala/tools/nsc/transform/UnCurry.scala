@@ -50,8 +50,8 @@ import scala.reflect.internal.util.ListOfNil
  *
  *      meth(x_1,..., try { x_i } catch { ..}, .. x_b0) ==>
  *        {
- *          def liftedTry$1 = try { x_i } catch { .. }
- *          meth(x_1, .., liftedTry$1(), .. )
+ *          def liftedTry\$1 = try { x_i } catch { .. }
+ *          meth(x_1, .., liftedTry\$1(), .. )
  *        }
  *  - remove calls to elidable methods and replace their bodies with NOPs when elide-below
  *    requires it
@@ -209,10 +209,10 @@ abstract class UnCurry extends InfoTransform
 
     /**  Transform a function node (x_1,...,x_n) => body of type FunctionN[T_1, .., T_N, R] to
      *
-     *    class $anon() extends AbstractFunctionN[T_1, .., T_N, R] with Serializable {
+     *    class \$anon() extends AbstractFunctionN[T_1, .., T_N, R] with Serializable {
      *      def apply(x_1: T_1, ..., x_N: T_n): R = body
      *    }
-     *    new $anon()
+     *    new \$anon()
      *
      */
     def transformFunction(fun: Function): Tree =
@@ -392,7 +392,7 @@ abstract class UnCurry extends InfoTransform
      *  mark the method symbol SYNCHRONIZED for bytecode generation.
      *
      *  Delambdafy targets are deemed ineligible as the Delambdafy phase will
-     *  replace `this.synchronized` with `$this.synchronized` now that it emits
+     *  replace `this.synchronized` with `\$this.synchronized` now that it emits
      *  all lambda impl methods as static.
      */
     private def translateSynchronized(tree: Tree) = tree match {
@@ -686,7 +686,7 @@ abstract class UnCurry extends InfoTransform
      * For the example above, this results in:
      *
      * {{{
-     *   def foo(a: A, b: a.B forSome { val a: A }): a.B = { val b$1 = b.asInstanceOf[a.B]; b$1; b$1 }
+     *   def foo(a: A, b: a.B forSome { val a: A }): a.B = { val b\$1 = b.asInstanceOf[a.B]; b\$1; b\$1 }
      * }}}
      */
     private object dependentParamTypeErasure {
@@ -735,29 +735,29 @@ abstract class UnCurry extends InfoTransform
               val tempVal: ValDef = {
                 // scala/bug#9442: using the "uncurry-erased" type (the one after the uncurry phase) can lead to incorrect
                 // tree transformations. For example, compiling:
-                // ```
+                //
                 //   def foo(c: Ctx)(l: c.Tree): Unit = {
                 //     val l2: c.Tree = l
                 //   }
-                // ```
+                //
                 // Results in the following AST:
-                // ```
+                //
                 //   def foo(c: Ctx, l: Ctx#Tree): Unit = {
                 //     val l$1: Ctx#Tree = l.asInstanceOf[Ctx#Tree]
                 //     val l2: c.Tree = l$1 // no, not really, it's not.
                 //   }
-                // ```
+                //
                 // Of course, this is incorrect, since `l$1` has type `Ctx#Tree`, which is not a subtype of `c.Tree`.
                 //
                 // So what we need to do is to use the pre-uncurry type when creating `l$1`, which is `c.Tree` and is
                 // correct. Now, there are two additional problems:
                 // 1. when varargs and byname params are involved, the uncurry transformation desugars these special
                 //    cases to actual typerefs, eg:
-                //    ```
+                //
                 //           T*   ~> Seq[T] (Scala-defined varargs)
                 //           T*   ~> Array[T] (Java-defined varargs)
                 //           => T ~> Function0[T] (by name params)
-                //    ```
+                //
                 //    we use the DesugaredParameterType object (defined in scala.reflect.internal.transform.UnCurry)
                 //    to redo this desugaring manually here
                 // 2. the type needs to be normalized, since `gen.mkCast` checks this (no HK here, just aliases have
