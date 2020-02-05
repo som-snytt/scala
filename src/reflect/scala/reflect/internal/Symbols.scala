@@ -1538,13 +1538,23 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
         _rawflags |= LOCKED
       }
       val current = phase
-      try {
-        assertCorrectThread()
-        phase = phaseOf(infos.validFrom)
-        tp.complete(this)
-      } finally {
-        unlock()
-        phase = current
+      if (isCompilerUniverse) {
+        try {
+          assertCorrectThread()
+          phase = phaseOf(infos.validFrom)
+          tp.complete(this)
+        } finally {
+          unlock()
+          phase = current
+        }
+      } else {
+          // In runtime reflection, there is only on phase, so don't mutate Global.phase which would lead to warnings
+        // of data races from when using TSAN to assess thread safety.
+        try {
+          tp.complete(this)
+        } finally {
+          unlock()
+        }
       }
     } catch {
       case ex: CyclicReference =>
@@ -1554,7 +1564,10 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     def info_=(info: Type): Unit = {
       assert(info ne null, "Can't assign a null type")
-      infos = TypeHistory(currentPeriod, info, null)
+      if (infos ne null) {
+        infos.reset(currentPeriod, info)
+      } else
+        infos = TypeHistory(currentPeriod, info, null)
       unlock()
       _validTo = if (info.isComplete) currentPeriod else NoPeriod
     }
@@ -1625,7 +1638,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
               // scala/bug#8871 Discard all but the first element of type history. Specialization only works in the resident
               // compiler / REPL if re-run its info transformer in this run to correctly populate its
               // per-run caches, e.g. typeEnv
-              infos = adaptInfo(infos.oldest)
+              adaptInfo(infos.oldest)
+              infos = this.infos
             }
 
             //assert(runId(validTo) == currentRunId, name)
@@ -1663,7 +1677,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
 
     // adapt to new run in fsc.
-    private def adaptInfo(oldest: TypeHistory): TypeHistory = {
+    private def adaptInfo(oldest: TypeHistory): Unit = {
       assert(isCompilerUniverse, "Must be compiler universe")
       assert(oldest.prev == null, "Previous history must be null")
       val pid = phaseId(oldest.validFrom)
@@ -1675,10 +1689,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       if (info1 eq oldest.info) {
         oldest.validFrom = validTo
         this.infos = oldest
-        oldest
       } else {
-        this.infos = TypeHistory(validTo, info1, null)
-        this.infos
+        if (this.infos ne null) {
+          this.infos = this.infos.reset(validTo, info1)
+        } else
+          this.infos = TypeHistory(validTo, info1, null)
       }
     }
 
@@ -2384,11 +2399,12 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      *
      *  @param baseClass is a base class of this symbol's owner.
      */
-    final def overriddenSymbol(baseClass: Symbol): Symbol = (
+    final def overriddenSymbol(baseClass: Symbol): Symbol = {
       // concrete always overrides abstract, so don't let an abstract definition
       // claim to be overriding an inherited concrete one.
-      matchingInheritedSymbolIn(baseClass) filter (res => res.isDeferred || !this.isDeferred)
-    )
+      val matching = matchingInheritedSymbolIn(baseClass)
+      if (isDeferred) matching.filter(_.isDeferred) else matching
+    }
 
     private def matchingInheritedSymbolIn(baseClass: Symbol): Symbol =
       if (canMatchInheritedSymbols) matchingSymbol(baseClass, owner.thisType) else NoSymbol
@@ -3597,7 +3613,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     privateWithin = this
 
     override def info_=(info: Type) = {
-      infos = TypeHistory(1, NoType, null)
+      infos = noTypeHistory
       unlock()
       validTo = currentPeriod
     }
@@ -3706,7 +3722,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
    */
   def deriveTypeWithWildcards(syms: List[Symbol])(tpe: Type): Type = {
     if (syms.isEmpty) tpe
-    else tpe.instantiateTypeParams(syms, syms map (_ => WildcardType))
+    else tpe.instantiateTypeParams(syms, WildcardType.fillList(syms.length))
   }
   /** Convenience functions which derive symbols by cloning.
    */
@@ -3769,9 +3785,24 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   }
 
   /** A class for type histories */
-  private final case class TypeHistory(var validFrom: Period, info: Type, prev: TypeHistory) {
+  private final case class TypeHistory private (private var _validFrom: Period, private var _info: Type, private var _prev: TypeHistory) {
     assert((prev eq null) || phaseId(validFrom) > phaseId(prev.validFrom), this)
     assert(validFrom != NoPeriod, this)
+
+    def validFrom: Int = _validFrom
+    def validFrom_=(x: Int): Unit = {_validFrom = x }
+    def info: Type = _info
+    def prev: TypeHistory = _prev
+
+    // OPT: mutate the current TypeHistory rather than creating a new one. TypeHistory instances should not be shared.
+    final def reset(validFrom: Period, info: Type): TypeHistory =
+      if (this ne noTypeHistory) {
+        this._validFrom = validFrom
+        this._info = info
+        this._prev = null
+        this
+      } else
+          TypeHistory(validFrom, info, null)
 
     private def phaseString = {
       val phase = phaseOf(validFrom)
@@ -3779,10 +3810,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     }
     override def toString = toList.reverseIterator map (_.phaseString) mkString ", "
 
-    def toList: List[TypeHistory] = this :: ( if (prev eq null) Nil else prev.toList )
+    private def toList: List[TypeHistory] = this :: ( if (prev eq null) Nil else prev.toList )
 
     @tailrec def oldest: TypeHistory = if (prev == null) this else prev.oldest
   }
+  private[this] final val noTypeHistory = TypeHistory(1, NoType, null)
 
 // ----- Hoisted closures and convenience methods, for compile time reductions -------
 

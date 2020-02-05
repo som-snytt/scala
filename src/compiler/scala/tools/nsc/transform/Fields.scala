@@ -14,6 +14,7 @@ package scala.tools.nsc
 package transform
 
 import scala.annotation.tailrec
+import scala.reflect.internal.util.ListOfNil
 import symtab.Flags._
 
 
@@ -612,7 +613,7 @@ abstract class Fields extends InfoTransform with ast.TreeDSL with TypingTransfor
           case _ => tree
         }
 
-      def initialized = Select(Ident(holderSym), initializedSym)
+      def initialized = Apply(Select(Ident(holderSym), initializedSym), Nil)
       def initialize  = Select(Ident(holderSym), initializeSym)
       def getValue    = if (isUnit) UNIT else refineLiteral(Apply(Select(Ident(holderSym), valueSym), Nil))
 
@@ -701,7 +702,7 @@ abstract class Fields extends InfoTransform with ast.TreeDSL with TypingTransfor
 
       val synthAccessorInClass = new SynthLazyAccessorsIn(clazz)
       def superLazy(getter: Symbol): Tree = {
-        assert(!clazz.isTrait)
+        assert(!clazz.isTrait, clazz)
         // this contortion was the only way I can get the super select to be type checked correctly..
         // TODO: why does SelectSuper not work?
         val selectSuper = Select(Super(This(clazz), tpnme.EMPTY), getter.name)

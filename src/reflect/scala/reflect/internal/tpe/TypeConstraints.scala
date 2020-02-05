@@ -34,8 +34,12 @@ private[internal] trait TypeConstraints {
     //OPT this method is public so we can do `manual inlining`
     var log: UndoPairs = List()
 
-    // register with the auto-clearing cache manager
-    perRunCaches.recordCache(this)
+    if (isCompilerUniverse) {
+      // register with the auto-clearing cache manager
+      // perRunCaches isn't threadsafe so don't do this in runtime reflection, which doesn't (can't)
+      // ever call `perRunCaches.clearAll()` anyway
+      perRunCaches.recordCache(this)
+    }
 
     /** Undo all changes to constraints to type variables up to `limit`. */
     //OPT this method is public so we can do `manual inlining`
@@ -135,7 +139,7 @@ private[internal] trait TypeConstraints {
     def checkWidening(tp: Type): Unit = {
       if (TypeVar.precludesWidening(tp)) stopWidening()
       else tp match {
-        case HasTypeMember(_, _) => stopWidening()
+        case HasTypeMember() => stopWidening()
         case _ =>
       }
     }
@@ -205,12 +209,9 @@ private[internal] trait TypeConstraints {
   def solve(tvars: List[TypeVar], tparams: List[Symbol], getVariance: Variance.Extractor[Symbol], upper: Boolean, depth: Depth): Boolean = {
     assert(tvars.corresponds(tparams)((tvar, tparam) => tvar.origin.typeSymbol eq tparam), (tparams, tvars.map(_.origin.typeSymbol)))
     val areContravariant: BitSet = BitSet.empty
-    foreachWithIndex(tparams){(tparam, ix) =>
-      if (getVariance(tparam).isContravariant) areContravariant += ix
-    }
+    foreachWithIndex(tparams)((tparam, ix) => if (getVariance(tparam).isContravariant) areContravariant += ix)
 
-    @inline def toBound(hi: Boolean, tparam: Symbol) =
-      if (hi) tparam.info.upperBound else tparam.info.lowerBound
+    @inline def toBound(hi: Boolean, tparam: Symbol) = if (hi) tparam.info.upperBound else tparam.info.lowerBound
 
     def solveOne(tvar: TypeVar, isContravariant: Boolean): Unit = {
       if (tvar.constr.inst == NoType) {

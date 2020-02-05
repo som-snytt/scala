@@ -275,7 +275,7 @@ trait IterableOps[+A, +CC[_], +C] extends Any with IterableOnce[A] with Iterable
         var i = 0
         val it = iterator
         while (it.hasNext) {
-          if (i == otherSize) return if (it.hasNext) 1 else 0
+          if (i == otherSize) return 1
           it.next()
           i += 1
         }
@@ -828,7 +828,7 @@ trait IterableOps[+A, +CC[_], +C] extends Any with IterableOnce[A] with Iterable
     */
   def inits: Iterator[C] = iterateUntilEmpty(_.init)
 
-  override def tapEach[U](f: A => U): C = fromSpecific(new View.Map(this, { a: A => f(a); a }))
+  override def tapEach[U](f: A => U): C = fromSpecific(new View.Map(this, { (a: A) => f(a); a }))
 
   // A helper for tails and inits.
   private[this] def iterateUntilEmpty(f: Iterable[A] => Iterable[A]): Iterator[C] = {

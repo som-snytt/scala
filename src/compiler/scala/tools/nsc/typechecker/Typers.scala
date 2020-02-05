@@ -552,7 +552,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
      *  (illegal type applications in pre will be skipped -- that's why typedSelect wraps the resulting tree in a TreeWithDeferredChecks)
      *  @return modified tree and new prefix type
      */
-    private def makeAccessible(tree: Tree, sym: Symbol, pre: Type, site: Tree): (Tree, Type) =
+    private def makeAccessible(tree: Tree, sym: Symbol, pre: Type, site: Tree): Any /*Type | (Tree, Type)*/ =
       if (!unit.isJava && context.isInPackageObject(sym, pre.typeSymbol)) {
         if (pre.typeSymbol == ScalaPackageClass && sym.isTerm) {
           // short cut some aliases. It seems pattern matching needs this
@@ -589,7 +589,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         }
         (checkAccessible(tree1, sym, qual.tpe, qual, unit.isJava), qual.tpe)
       } else {
-        (checkAccessible(tree, sym, pre, site, unit.isJava), pre)
+        checkAccessible(tree, sym, pre, site, unit.isJava)
       }
 
     /** Post-process an identifier or selection node, performing the following:
@@ -2132,7 +2132,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             // When typechecking default parameter, replace all type parameters in the expected type by Wildcard.
             // This allows defining "def foo[T](a: T = 1)"
             val tparams = sym.owner.skipConstructor.info.typeParams
-            val subst = new SubstTypeMap(tparams, tparams map (_ => WildcardType)) {
+            val subst = new SubstTypeMap(tparams, WildcardType.fillList(tparams.length)) {
               override def matches(sym: Symbol, sym1: Symbol) =
                 if (sym.isSkolem) matches(sym.deSkolemize, sym1)
                 else if (sym1.isSkolem) matches(sym, sym1.deSkolemize)
@@ -2544,10 +2544,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               case Literal(Constant(()))                     => (0, EmptyTree, false)
               case _                                         => (1, EmptyTree, false)
             }
+          val isMultiline = statsTyped.lengthCompare(1 - count) > 0
           def checkPure(t: Tree, supple: Boolean): Unit =
             if (!explicitlyUnit(t) && treeInfo.isPureExprForWarningPurposes(t)) {
               val msg = "a pure expression does nothing in statement position"
-              val parens = if (statsTyped.length + count > 1) "multiline expressions might require enclosing parentheses" else ""
+              val parens = if (isMultiline) "multiline expressions might require enclosing parentheses" else ""
               val discard = if (adapted) "; a value can be silently discarded when Unit is expected" else ""
               val text =
                 if (supple) s"${parens}${discard}"
@@ -2556,6 +2557,16 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             }
           statsTyped.foreach(checkPure(_, supple = false))
           if (result0.nonEmpty) checkPure(result0, supple = true)
+          def checkImplicitlyAdaptedBlockResult(t: Tree): Unit =
+            expr1 match {
+              case treeInfo.Applied(f, _, _) if f.symbol != null && f.symbol.isImplicit =>
+                f.symbol.paramLists match {
+                  case (p :: Nil) :: _ if p.isByNameParam => context.warning(t.pos, s"Block result was adapted via implicit conversion (${f.symbol}) taking a by-name parameter")
+                  case _ =>
+                }
+              case _ =>
+            }
+          if (isMultiline && settings.warnByNameImplicit) checkImplicitlyAdaptedBlockResult(expr1)
         }
 
         // Remove ValDef for right-associative by-value operator desugaring which has been inlined into expr1
@@ -3125,7 +3136,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
           else {
             // We're looking for a method (as indicated by FUNmode in the silent typed below),
             // so let's make sure our expected type is a MethodType (of the right arity, but we can't easily say more about the argument types)
-            val methArgs = NoSymbol.newSyntheticValueParams(args map { case _ => WildcardType })
+            val methArgs = NoSymbol.newSyntheticValueParams(WildcardType.fillList(args.length))
 
             silent(_.typed(meth, mode.forFunMode, MethodType(methArgs, resProto))).fold(EmptyTree: Tree) { methTyped =>
               // if context.undetparams is not empty, the method was polymorphic,
@@ -3339,14 +3350,15 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
 
             (!sym.isModule || shouldAddAsModule) && (inBlock || !context.isInPackageObject(sym, context.owner))
           }
-          for (sym <- scope)
+          for (sym <- scope)  context.unit.synthetics.get(sym) match {
             // OPT: shouldAdd is usually true. Call it here, rather than in the outer loop
-            for (tree <- context.unit.synthetics.get(sym) if shouldAdd(sym)) {
+            case Some(tree) if shouldAdd(sym) =>
               // if the completer set the IS_ERROR flag, retract the stat (currently only used by applyUnapplyMethodCompleter)
               if (!sym.initialize.hasFlag(IS_ERROR))
                 newStats += typedStat(tree) // might add even more synthetics to the scope
               context.unit.synthetics -= sym
-            }
+            case _ => ()
+          }
           // the type completer of a synthetic might add more synthetics. example: if the
           // factory method of a case class (i.e. the constructor) has a default.
           moreToAdd = scope.elems ne initElems
@@ -3544,8 +3556,24 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             if (context.reporter.hasErrors)
               setError(tree)
             else {
+              import scala.util.chaining._
+              // warn about conversions applied to blocks (#9386) in lieu of fixing
+              def checkConversionsToBlockArgs(appl: Tree): Unit =
+                if (settings.warnByNameImplicit) {
+                  val treeInfo.Applied(_, _, argss) = appl
+                  val needsAdjust =
+                    argss.find {
+                      case (aiv: ApplyImplicitView) :: Nil =>
+                        aiv.args match {
+                          case Block(_, _) :: Nil => true
+                          case _ => false
+                        }
+                      case _ => false
+                    }
+                  needsAdjust.foreach(ts => context.warning(ts.head.pos, "Implicits applied to block expressions after overload resolution may have unexpected semantics"))
+                }
               inferMethodAlternative(fun, undetparams, argTpes.toList, pt)
-              doTypedApply(tree, adaptAfterOverloadResolution(fun, mode.forFunMode, WildcardType), args1, mode, pt)
+              doTypedApply(tree, adaptAfterOverloadResolution(fun, mode.forFunMode, WildcardType), args1, mode, pt).tap(checkConversionsToBlockArgs)
             }
           }
           handleOverloaded
@@ -4572,16 +4600,27 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         if (varsym == null)
           return fail()
 
-        if (treeInfo.mayBeVarGetter(varsym)) {
+        def shadowsSetter =
+          lhs1 match {
+            case treeInfo.Applied(Select(qual, _), _, _) =>
+              qual.tpe.member(varsym.name.setterName).exists
+            case _ => false
+          }
+
+        def setterRewrite =
           lhs1 match {
             case treeInfo.Applied(Select(qual, _), _, _) =>
               val sel = Select(qual, varsym.name.setterName) setPos lhs.pos
               val app = Apply(sel, List(rhs)) setPos tree.pos
-              return typed(app, mode, pt)
-
-            case _ =>
+              typed(app, mode, pt)
+            case _ => EmptyTree
           }
+
+        if (treeInfo.mayBeVarGetter(varsym)) {
+          val res = setterRewrite
+          if (!res.isEmpty) return res
         }
+
 //      if (varsym.isVariable ||
 //        // setter-rewrite has been done above, so rule out methods here, but, wait a minute, why are we assigning to non-variables after erasure?!
 //        (phase.erasedTypes && varsym.isValue && !varsym.isMethod)) {
@@ -4594,6 +4633,10 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             Apply(lhs1, List(rhs))
           }
           wrapErrors(t, _.typed1(t, mode, pt))
+        }
+        else if (shadowsSetter) {
+          val res = setterRewrite
+          if (!res.isEmpty) res else fail()
         }
         else fail()
       }
@@ -4768,7 +4811,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             val etaPt =
               pt match {
                 case pt: ProtoType =>
-                  pt.asFunctionType orElse functionType(tp.params.map(_ => WildcardType), WildcardType) orElse WildcardType // arity overflow --> NoType
+                  pt.asFunctionType orElse functionType(WildcardType.fillList(tp.params.length), WildcardType) orElse WildcardType // arity overflow --> NoType
                 case _             => pt
               }
 
@@ -5222,14 +5265,19 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
               case Select(_, _) => treeCopy.Select(tree, qual, name)
               case SelectFromTypeTree(_, _) => treeCopy.SelectFromTypeTree(tree, qual, name)
             }
-            val (result, accessibleError) = silent(_.makeAccessible(tree1, sym, qual.tpe, qual)) match {
+            val pre = qual.tpe
+            var accessibleError: AccessTypeError = null
+            val result = silent(_.makeAccessible(tree1, sym, pre, qual)) match {
               case SilentTypeError(err: AccessTypeError) =>
-                (tree1, Some(err))
+                accessibleError = err
+                tree1
               case SilentTypeError(err) =>
                 SelectWithUnderlyingError(tree, err)
                 return tree
-              case SilentResultValue((qual, pre)) =>
-                (stabilize(qual, pre, mode, pt), None)
+              case SilentResultValue((qual: Tree, pre1: Type)) =>
+                stabilize(qual, pre1, mode, pt)
+              case SilentResultValue(qual: Tree) =>
+                stabilize(qual, pre, mode, pt)
             }
 
             result match {
@@ -5243,7 +5291,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
                     qual // you only get to see the wrapped tree after running this check :-p
                   }) setType qual.tpe setPos qual.pos,
                   name)
-              case _ if accessibleError.isDefined =>
+              case _ if accessibleError != null =>
                 // don't adapt constructor, scala/bug#6074
                 val qual1 = if (name == nme.CONSTRUCTOR) qual
                             else adaptToMemberWithArgs(tree, qual, name, mode, reportAmbiguous = false, saveErrors = false)
@@ -5252,7 +5300,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
                 else
                   // before failing due to access, try a dynamic call.
                   asDynamicCall getOrElse {
-                    context.issue(accessibleError.get)
+                    context.issue(accessibleError)
                     setError(tree)
                   }
               case _ =>
@@ -5363,7 +5411,15 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
                 val pos = tree.pos
                 Select(atPos(pos.focusStart)(qual), name).setPos(pos)
               }
-              val (tree2, pre2) = makeAccessible(tree1, sym, pre1, qual)
+              var tree2: Tree = null
+              var pre2: Type = pre1
+              makeAccessible(tree1, sym, pre1, qual) match {
+                case (t: Tree, tp: Type) =>
+                  tree2 = t
+                  pre2 = tp
+                case t: Tree =>
+                  tree2 = t
+              }
             // scala/bug#5967 Important to replace param type A* with Seq[A] when seen from from a reference, to avoid
             //         inference errors in pattern matching.
               stabilize(tree2, pre2, mode, pt) modifyType dropIllegalStarTypes
@@ -5892,7 +5948,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         if (tree1.tpe eq null)
           return setError(tree)
 
-        tree1 modifyType (pluginsTyped(_, this, tree1, mode, ptPlugins))
+        tree1 setType pluginsTyped(tree1.tpe, this, tree1, mode, ptPlugins)
 
         val result =
           if (tree1.isEmpty) tree1

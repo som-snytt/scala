@@ -109,6 +109,8 @@ Once you've started an `sbt` session you can run one of the core commands:
   - `compile` compiles all sub-projects (library, reflect, compiler, scaladoc, etc)
   - `scala` / `scalac` run the REPL / compiler directly from sbt (accept options /
     arguments)
+  - `enableOptimizer` reloads the build with the Scala optimizer enabled. Our releases are built this way. Enable this when working on compiler performance improvements. When the optimizer is enabled the build will be slower and incremental builds can be incorrect.
+  - `setupPublishCore` which runs `enableOptimizer` and also configures a version number based on the current Git SHA. Often used as part of bootstrapping `sbt setupPublishCore publishLocal && sbt -Dstarr.version=<VERSION> testAll`
   - `dist/mkBin` generates runner scripts (`scala`, `scalac`, etc) in `build/quick/bin`
   - `dist/mkPack` creates a build in the Scala distribution format in `build/pack`
   - `test` runs the JUnit test, `testOnly *immutable.ListTest` runs a subset
@@ -116,9 +118,9 @@ Once you've started an `sbt` session you can run one of the core commands:
   - `scalacheck/test` runs scalacheck tests, `scalacheck/testOnly *FloatFormatTest` runs a subset
   - `publishLocal` publishes a distribution locally (can be used as `scalaVersion` in
     other sbt projects)
-    - Optionally `set baseVersionSuffix := "-bin-abcd123-SNAPSHOT"`
+    - Optionally `set baseVersionSuffix := "bin-abcd123-SNAPSHOT"`
       where `abcd123` is the git hash of the revision being published. You can also
-      use something custom like `"-bin-mypatch"`. This changes the version number from
+      use something custom like `"bin-mypatch"`. This changes the version number from
       `2.12.2-SNAPSHOT` to something more stable (`2.12.2-bin-abcd123-SNAPSHOT`).
     - Note that the `-bin` string marks the version binary compatible. Using it in
       sbt will cause the `scalaBinaryVersion` to be `2.12`. If the version is not

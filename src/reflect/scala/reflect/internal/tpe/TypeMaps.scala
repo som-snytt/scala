@@ -1004,13 +1004,9 @@ private[internal] trait TypeMaps {
     }
   }
 
-  /** A map to convert every occurrence of a wildcard type to a fresh
-    *  type variable */
-  object wildcardToTypeVarMap extends TypeMap {
-    def apply(tp: Type): Type = tp match {
-      case pt: ProtoType => TypeVar(tp, new TypeConstraint(pt.toBounds))
-      case _ => tp.mapOver(this)
-    }
+  /** A map that is conceptually an identity, but in practice may perform some side effects. */
+  object identityTypeMap extends TypeMap {
+    def apply(tp: Type): Type = tp.mapOver(this)
   }
 
   /** A map to convert each occurrence of a type variable to its origin. */
@@ -1021,7 +1017,7 @@ private[internal] trait TypeMaps {
     }
   }
 
-  abstract class ExistsTypeRefCollector extends TypeCollector(false) {
+  abstract class ExistsTypeRefCollector extends TypeCollector[Boolean](false) {
 
     protected def pred(sym: Symbol): Boolean
 
@@ -1049,23 +1045,21 @@ private[internal] trait TypeMaps {
         }
       }
 
-    private[this] def inTree(t: Tree): Boolean = {
-      if (pred(t.symbol)) result = true else apply(t.tpe)
-      result
-    }
-
-    private[this] object findInTree extends FindTreeTraverser(inTree) {
-      def collect(arg: Tree): Boolean = {
-        result = None // This is the FindTreeTraverser's result
-        traverse(arg)
-        result.isDefined
+    private lazy val findInTree = {
+      def inTree(t: Tree): Boolean = {
+        if (pred(t.symbol)) result = true else apply(t.tpe)
+        result
+      }
+      new FindTreeTraverser(inTree) {
+        def collect(arg: Tree): Boolean = {
+          /*super[FindTreeTraverser].*/ result = None
+          traverse(arg)
+          /*super[FindTreeTraverser].*/ result.isDefined
+        }
       }
     }
 
-    override def foldOver(arg: Tree): Unit = {
-      if (! result)
-        findInTree.collect(arg)
-    }
+    override def foldOver(arg: Tree) = if (!result) findInTree.collect(arg)
   }
 
   /** A map to implement the `contains` method. */

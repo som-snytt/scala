@@ -39,7 +39,7 @@ abstract class TreeGen extends scala.reflect.internal.TreeGen with TreeDSL {
   def mkImport(qualSym: Symbol, name: Name, toName: Name): Import =
     mkImportFromSelector(qualSym, ImportSelector(name, 0, toName, 0) :: Nil)
 
-  private def mkImportFromSelector(qualSym: Symbol, selector: List[ImportSelector]): Import = {
+  def mkImportFromSelector(qualSym: Symbol, selector: List[ImportSelector]): Import = {
     assert(qualSym ne null, this)
     val qual = gen.mkAttributedStableRef(qualSym)
     val importSym = (
@@ -131,14 +131,12 @@ abstract class TreeGen extends scala.reflect.internal.TreeGen with TreeDSL {
   def mkForwarder(target: Tree, vparamss: List[List[Symbol]]) =
     vparamss.foldLeft(target)((fn, vparams) => Apply(fn, vparams map paramToArg))
 
-  /** Applies a wrapArray call to an array, making it a mutable (old collections) or immutable
-   * (new collections) ArraySeq suitable for Scala varargs. Don't let a reference type parameter be
-   * inferred, in case it's a singleton: apply the element type directly.
-   */
+  /** Applies a wrapArray call to an array, making it an immutable ArraySeq suitable for Scala varargs.
+    * Don't let a reference type parameter be inferred, in case it's a singleton: apply the element type directly.
+    */
   def mkWrapVarargsArray(tree: Tree, elemtp: Type) = {
     mkMethodCall(
-      getWrapVarargsArrayModule,
-      wrapVarargsArrayMethodName(elemtp),
+      wrapVarargsArrayMethod(elemtp),
       if (isPrimitiveValueType(elemtp)) Nil else List(elemtp),
       List(tree)
     )
@@ -325,7 +323,7 @@ abstract class TreeGen extends scala.reflect.internal.TreeGen with TreeDSL {
       //
       // Analogous to this special case in ExplicitOuter: https://github.com/scala/scala/blob/d2d33ddf8c/src/compiler/scala/tools/nsc/transform/ExplicitOuter.scala#L410-L412
       // that understands that such references shouldn't give rise to outer params.
-      val enclosingStaticModules = owner.enclClassChain.filter(x => !x.hasPackageFlag && x.isModuleClass && x.isStatic)
+      val enclosingStaticModules = owner.ownersIterator.filter(x => !x.hasPackageFlag && x.isModuleClass && x.isStatic)
       enclosingStaticModules.foldLeft(tree)((tree, moduleClass) => tree.substituteThis(moduleClass, gen.mkAttributedIdent(moduleClass.sourceModule)) )
     }
 

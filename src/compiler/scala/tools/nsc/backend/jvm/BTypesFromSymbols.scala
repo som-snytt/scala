@@ -102,16 +102,17 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
       val internalName = classSym.javaBinaryNameString
       // The new ClassBType is added to the map via its apply, before we set its info. This
       // allows initializing cyclic dependencies, see the comment on variable ClassBType._info.
-      val btype = ClassBType(internalName, fromSymbol = true) { res:ClassBType =>
-        if (completeSilentlyAndCheckErroneous(classSym))
-          Left(NoClassBTypeInfoClassSymbolInfoFailedSI9111(classSym.fullName))
-        else computeClassInfo(classSym, res)
-      }
+      val btype = ClassBType.apply(internalName, classSym, fromSymbol = true)(classBTypeFromSymbolInit)
       if (currentRun.compiles(classSym))
         assert(btype.fromSymbol, s"ClassBType for class being compiled was already created from a classfile: ${classSym.fullName}")
       btype
     }
   }
+
+  private val classBTypeFromSymbolInit = (res: ClassBType, classSym: Symbol) =>
+    if (completeSilentlyAndCheckErroneous(classSym))
+      Left(NoClassBTypeInfoClassSymbolInfoFailedSI9111(classSym.fullName))
+    else computeClassInfo(classSym, res)
 
   /**
    * Builds a [[MethodBType]] for a method symbol.
@@ -128,7 +129,11 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
     val resultType: BType =
       if (isConstructor) UNIT
       else typeToBType(tpe.resultType)
-    MethodBType(tpe.paramTypes map typeToBType, resultType)
+    val params = tpe.params
+    // OPT allocation hotspot
+    val paramBTypes = BType.newArray(params.length)
+    mapToArray(params, paramBTypes, 0)(param => typeToBType(param.tpe))
+    MethodBType(paramBTypes, resultType)
   }
 
   def bootstrapMethodArg(t: Constant, pos: Position): AnyRef = t match {
@@ -158,7 +163,10 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
      */
     def primitiveOrClassToBType(sym: Symbol): BType = {
       assertClassNotArray(sym)
-      primitiveTypeToBType.getOrElse(sym, classBTypeFromSymbol(sym))
+      primitiveTypeToBType.getOrElse(sym, null) match {
+        case null => classBTypeFromSymbol(sym)
+        case res => res
+      }
     }
 
     /**
@@ -535,7 +543,7 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
         // empty parameter list in uncurry and would therefore be picked as SAM.
         // Similarly, the fields phases adds abstract trait setters, which should not be considered
         // abstract for SAMs (they do disqualify the SAM from LMF treatment,
-        // but an anonymous subclasss can be spun up by scalac after making just the single abstract method concrete)
+        // but an anonymous subclass can be spun up by scalac after making just the single abstract method concrete)
         val samSym = exitingPickler(definitions.samOf(classSym.tpe))
         if (samSym == NoSymbol) None
         else Some(samSym.javaSimpleName.toString + methodBTypeFromSymbol(samSym).descriptor)
@@ -557,13 +565,13 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
 
     // Primitive methods cannot be inlined, so there's no point in building a MethodInlineInfo. Also, some
     // primitive methods (e.g., `isInstanceOf`) have non-erased types, which confuses [[typeToBType]].
-    val methodInlineInfos = Map.from(methods.iterator.flatMap({
-      case methodSym =>
+    val methodInlineInfos = new collection.mutable.TreeMap[(String, String), MethodInlineInfo]()
+    methods.foreach {
+      methodSym =>
         if (completeSilentlyAndCheckErroneous(methodSym)) {
           // Happens due to scala/bug#9111. Just don't provide any MethodInlineInfo for that method, we don't need fail the compiler.
           if (!classSym.isJavaDefined) devWarning("scala/bug#9111 should only be possible for Java classes")
           warning = Some(ClassSymbolInfoFailureSI9111(classSym.fullName))
-          Nil
         } else {
           val name = methodSym.javaSimpleName.toString // same as in genDefDef
           val signature = (name, methodBTypeFromSymbol(methodSym).descriptor)
@@ -592,14 +600,13 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
               effectivelyFinal = true,
               annotatedInline = info.annotatedInline,
               annotatedNoInline = info.annotatedNoInline)
-            if (methodSym.isMixinConstructor)
-              (staticMethodSignature, staticMethodInfo) :: Nil
-            else
-              (signature, info) :: (staticMethodSignature, staticMethodInfo) :: Nil
+            methodInlineInfos(staticMethodSignature) = staticMethodInfo
+            if (!methodSym.isMixinConstructor)
+              methodInlineInfos(signature) = info
           } else
-            (signature, info) :: Nil
+            methodInlineInfos(signature) = info
         }
-    }))
+    }
 
     InlineInfo(isEffectivelyFinal, sam, methodInlineInfos, warning)
   }
@@ -612,7 +619,7 @@ abstract class BTypesFromSymbols[G <: Global](val global: G) extends BTypes {
   def mirrorClassClassBType(moduleClassSym: Symbol): ClassBType = {
     assert(isTopLevelModuleClass(moduleClassSym), s"not a top-level module class: $moduleClassSym")
     val internalName = moduleClassSym.javaBinaryNameString.stripSuffix(nme.MODULE_SUFFIX_STRING)
-    ClassBType(internalName, fromSymbol = true) { c: ClassBType =>
+    ClassBType(internalName, moduleClassSym, fromSymbol = true) { (c: ClassBType, moduleClassSym) =>
       val shouldBeLazy = moduleClassSym.isJavaDefined || !currentRun.compiles(moduleClassSym)
       val nested = Lazy.withLockOrEager(shouldBeLazy, exitingPickler(memberClassesForInnerClassTable(moduleClassSym)) map classBTypeFromSymbol)
       Right(ClassInfo(

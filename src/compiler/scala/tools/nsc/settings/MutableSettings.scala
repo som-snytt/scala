@@ -329,11 +329,8 @@ class MutableSettings(val errorFn: String => Unit)
         classFile.path.startsWith(outDir.path)
 
       singleOutDir match {
-        case Some(d) =>
-          d match {
-              case _: VirtualDirectory | _: io.ZipArchive => Nil
-              case _                   => List(d.lookupPathUnchecked(srcPath, directory = false))
-          }
+        case Some(_: VirtualDirectory | _: io.ZipArchive) => Nil
+        case Some(d) => List(d.lookupPathUnchecked(srcPath, directory = false))
         case None =>
           (outputs filter (isBelow _).tupled) match {
             case Nil => Nil
@@ -590,6 +587,7 @@ class MutableSettings(val errorFn: String => Unit)
    */
   abstract class MultiChoiceEnumeration extends Enumeration {
     case class Choice(name: String, help: String = "", expandsTo: List[Choice] = Nil) extends Val(name)
+    def wildcardChoices: ValueSet = values.filter { case c: Choice => c.expandsTo.isEmpty case _ => true }
   }
 
   /**
@@ -661,8 +659,8 @@ class MutableSettings(val errorFn: String => Unit)
     /** (Re)compute from current yeas, nays, wildcard status. */
     def compute() = {
       def simple(v: domain.Value) = v match {
-        case ChoiceOrVal(_, _, Nil) => true
-        case _ => false
+        case c: domain.Choice => c.expandsTo.isEmpty
+        case _ => true
       }
 
       /**
@@ -677,7 +675,7 @@ class MutableSettings(val errorFn: String => Unit)
       }
 
       // yeas from _ or expansions are weak: an explicit nay will disable them
-      val weakYeas = if (sawAll) domain.values filter simple else expand(yeas filterNot simple)
+      val weakYeas = if (sawAll) domain.wildcardChoices else expand(yeas filterNot simple)
       value = (yeas filter simple) | (weakYeas &~ nays)
     }
 

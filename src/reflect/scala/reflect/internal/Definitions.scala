@@ -250,7 +250,7 @@ trait Definitions extends api.StandardDefinitions {
      *  - constructors, because <init> is not a real name
      *  - private[this] members, which cannot be referenced from anywhere else
      *  - members of Any or Object, because every instance will inherit a
-     *    definition which supersedes the imported one
+     *    definition which supersedes the imported one, unless renamed
      */
     def isUnimportable(sym: Symbol) = (
          (sym eq NoSymbol)
@@ -322,8 +322,8 @@ trait Definitions extends api.StandardDefinitions {
       def AnyVal_getClass = getMemberMethod(AnyValClass, nme.getClass_)
 
     // bottom types
-    lazy val RuntimeNothingClass  = getClassByName(fulltpnme.RuntimeNothing)
-    lazy val RuntimeNullClass     = getClassByName(fulltpnme.RuntimeNull)
+    lazy val RuntimeNothingClass = requiredClass[scala.runtime.Nothing$]
+    lazy val RuntimeNullClass    = requiredClass[scala.runtime.Null$]
 
     sealed abstract class BottomClassSymbol(name: TypeName, parent: Symbol) extends ClassSymbol(ScalaPackageClass, NoPosition, name) {
       locally {
@@ -384,9 +384,7 @@ trait Definitions extends api.StandardDefinitions {
       (sym.name == name) && (sym.owner == PredefModule.moduleClass)
     )
 
-    // This is a not the usual lazy val to prevent it from showing up as a separate module in JavaUniverseForce.scala
-    def getWrapVarargsArrayModule        = if(isNewCollections) ScalaRunTimeModule else PredefModule
-    def wrapVarargsArrayMethod(tp: Type) = getMemberMethod(getWrapVarargsArrayModule, wrapVarargsArrayMethodName(tp))
+    def wrapVarargsArrayMethod(tp: Type) = getMemberMethod(ScalaRunTimeModule, wrapVarargsArrayMethodName(tp))
 
     /** Specialization.
      */
@@ -403,6 +401,7 @@ trait Definitions extends api.StandardDefinitions {
 
     lazy val TypeConstraintClass   = requiredClass[scala.annotation.TypeConstraint]
     lazy val SingletonClass        = enterNewClass(ScalaPackageClass, tpnme.Singleton, AnyTpe :: Nil, ABSTRACT | TRAIT | FINAL).markAllCompleted
+    lazy val ListOfSingletonClassTpe = SingletonClass.tpe :: Nil
     lazy val SerializableClass     = requiredClass[java.io.Serializable] modifyInfo fixupAsAnyTrait
     lazy val ComparableClass       = requiredClass[java.lang.Comparable[_]] modifyInfo fixupAsAnyTrait
     lazy val JavaCloneableClass    = requiredClass[java.lang.Cloneable] modifyInfo fixupAsAnyTrait
@@ -469,26 +468,24 @@ trait Definitions extends api.StandardDefinitions {
     lazy val DummyImplicitClass = requiredClass[scala.DummyImplicit]
 
     // collections classes
-    private[this] lazy val _isNewCollections = getClassIfDefined("scala.collection.IterableOnce") != NoSymbol
-    private[scala] def isNewCollections = _isNewCollections
     lazy val ConsClass              = requiredClass[scala.collection.immutable.::[_]]
     lazy val IteratorClass          = requiredClass[scala.collection.Iterator[_]]
     lazy val IterableClass          = requiredClass[scala.collection.Iterable[_]]
     lazy val ListClass              = requiredClass[scala.collection.immutable.List[_]]
              def List_cons              = getMemberMethod(ListClass, nme.CONS)
     @migration("SeqClass now refers to scala.collection.immutable.Seq", "2.13.0")
-    lazy val SeqClass               = if(isNewCollections) requiredClass[scala.collection.immutable.Seq[_]] else requiredClass[scala.collection.Seq[_]]
+    lazy val SeqClass               = requiredClass[scala.collection.immutable.Seq[_]]
     lazy val JavaStringBuilderClass = requiredClass[java.lang.StringBuilder]
     lazy val JavaStringBufferClass  = requiredClass[java.lang.StringBuffer]
     lazy val JavaCharSequenceClass  = requiredClass[java.lang.CharSequence]
     @deprecated("Use IterableClass instead of TraversableClass", "2.13.0")
-    lazy val TraversableClass       = if(isNewCollections) IterableClass else requiredClass[scala.collection.Traversable[_]]
+         def TraversableClass       = IterableClass
 
     lazy val ListModule       = requiredModule[scala.collection.immutable.List.type]
          def List_apply       = getMemberMethod(ListModule, nme.apply)
     lazy val NilModule        = requiredModule[scala.collection.immutable.Nil.type]
     @migration("SeqModule now refers to scala.collection.immutable.Seq", "2.13.0")
-    lazy val SeqModule        = if(isNewCollections) requiredModule[scala.collection.immutable.Seq.type] else requiredModule[scala.collection.Seq.type]
+    lazy val SeqModule        = requiredModule[scala.collection.immutable.Seq.type]
 
     // arrays and their members
     lazy val ArrayModule                   = requiredModule[scala.Array.type]
@@ -521,7 +518,7 @@ trait Definitions extends api.StandardDefinitions {
 
     // XML
     lazy val ScalaXmlTopScope = getModuleIfDefined("scala.xml.TopScope")
-    lazy val ScalaXmlPackage  = getPackageIfDefined(TermName("scala.xml"))
+    lazy val ScalaXmlPackage  = getPackageIfDefined("scala.xml")
 
     // scala.reflect
     lazy val ReflectPackage              = requiredModule[scala.reflect.`package`.type]
@@ -1683,7 +1680,7 @@ trait Definitions extends api.StandardDefinitions {
       lazy val arrayCloneMethod       = getMemberMethod(ScalaRunTimeModule, nme.array_clone)
       lazy val ensureAccessibleMethod = getMemberMethod(ScalaRunTimeModule, nme.ensureAccessible)
       lazy val arrayClassMethod       = getMemberMethod(ScalaRunTimeModule, nme.arrayClass)
-      lazy val wrapVarargsRefArrayMethod = getMemberMethod(getWrapVarargsArrayModule, nme.wrapRefArray)
+      lazy val wrapVarargsRefArrayMethod = getMemberMethod(ScalaRunTimeModule, nme.wrapRefArray)
 
       lazy val RuntimeStatics_ioobe = getMemberMethod(RuntimeStaticsModule, nme.ioobe)
 

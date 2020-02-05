@@ -180,7 +180,8 @@ abstract class LambdaLift extends InfoTransform {
             renamable += sym
             changedFreeVars = true
             debuglog(s"$sym is free in $enclosure")
-            if (sym.isVariable) sym setFlag CAPTURED
+            if (sym.isVariable && !sym.hasStableFlag) // write-once synthetic case vars are marked STABLE
+              sym setFlag CAPTURED
           }
           !enclosure.isClass
         }
@@ -213,7 +214,7 @@ abstract class LambdaLift extends InfoTransform {
             }
           case Ident(name) =>
             if (sym == NoSymbol) {
-              assert(name == nme.WILDCARD)
+              assert(name == nme.WILDCARD, name)
             } else if (sym.isLocalToBlock) {
               val owner = logicallyEnclosingMember(currentOwner)
               if (sym.isTerm && !sym.isMethod) markFree(sym, owner)

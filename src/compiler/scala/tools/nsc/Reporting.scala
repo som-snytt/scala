@@ -15,14 +15,14 @@ package tools
 package nsc
 
 import scala.collection.mutable
-import scala.reflect.internal.util.StringOps.countElementsAsString
+import scala.reflect.internal, internal.util.StringOps.countElementsAsString
 
 /** Provides delegates to the reporter doing the actual work.
  * PerRunReporting implements per-Run stateful info tracking and reporting
  *
  * TODO: make reporting configurable
  */
-trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions with CompilationUnits with scala.reflect.internal.Symbols =>
+trait Reporting extends internal.Reporting { self: ast.Positions with CompilationUnits with internal.Symbols =>
   def settings: Settings
 
   // not deprecated yet, but a method called "error" imported into
@@ -34,9 +34,8 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
   class PerRunReporting extends PerRunReportingBase {
     /** Collects for certain classes of warnings during this run. */
     private class ConditionalWarning(what: String, doReport: Boolean, setting: Settings#Setting) {
-      def this(what: String, booleanSetting: Settings#BooleanSetting) {
+      def this(what: String, booleanSetting: Settings#BooleanSetting) =
         this(what, booleanSetting.value, booleanSetting)
-      }
       val warnings = mutable.LinkedHashMap[Position, (String, String)]()
       def warn(pos: Position, msg: String, since: String = "") =
         if (doReport) reporter.warning(pos, msg)
@@ -52,17 +51,15 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
           val deprecationSummary = sinceAndAmount.size > 1
           sinceAndAmount.foreach { case (since, numWarnings) =>
             val warningsSince = if (since.nonEmpty) s" (since $since)" else ""
-            val warningVerb   = if (numWarnings == 1) "was" else "were"
-            val warningCount  = countElementsAsString(numWarnings, s"$what warning")
+            val warningCount  = countElementsAsString(numWarnings, what)
             val rerun         = if (deprecationSummary) "" else reporter.rerunWithDetails(setting, setting.name)
-            reporter.warning(NoPosition, s"there ${warningVerb} ${warningCount}${warningsSince}${rerun}")
+            reporter.warning(NoPosition, s"$warningCount$warningsSince$rerun")
           }
           if (deprecationSummary) {
             val numWarnings   = warnings.size
-            val warningVerb   = if (numWarnings == 1) "was" else "were"
-            val warningCount  = countElementsAsString(numWarnings, s"$what warning")
+            val warningCount  = countElementsAsString(numWarnings, what)
             val rerun         = reporter.rerunWithDetails(setting, setting.name)
-            reporter.warning(NoPosition, s"there ${warningVerb} ${warningCount} in total${rerun}")
+            reporter.warning(NoPosition, s"$warningCount in total$rerun")
           }
         }
     }
@@ -70,9 +67,9 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
     // This change broke sbt; I gave it the thrilling name of uncheckedWarnings0 so
     // as to recover uncheckedWarnings for its ever-fragile compiler interface.
     private val _deprecationWarnings    = new ConditionalWarning("deprecation", settings.deprecation)
-    private val _uncheckedWarnings      = new ConditionalWarning("unchecked", settings.unchecked)
-    private val _featureWarnings        = new ConditionalWarning("feature", settings.feature)
-    private val _inlinerWarnings        = new ConditionalWarning("inliner", !settings.optWarningsSummaryOnly, settings.optWarnings)
+    private val _uncheckedWarnings      = new ConditionalWarning("unchecked warning", settings.unchecked)
+    private val _featureWarnings        = new ConditionalWarning("feature warning", settings.feature)
+    private val _inlinerWarnings        = new ConditionalWarning("inliner warning", !settings.optWarningsSummaryOnly, settings.optWarnings)
     private val _allConditionalWarnings = List(_deprecationWarnings, _uncheckedWarnings, _featureWarnings, _inlinerWarnings)
 
     // TODO: remove in favor of the overload that takes a Symbol, give that argument a default (NoSymbol)
@@ -113,14 +110,16 @@ trait Reporting extends scala.reflect.internal.Reporting { self: ast.Positions w
       reportedFeature += featureTrait
 
       val msg = s"$featureDesc $req be enabled\nby making the implicit value $fqname visible.$explain" replace ("#", construct)
+      // maybe pos.source.file.file.getParentFile.getName or Path(source.file.file).parent.name
+      def parentFileName(source: internal.util.SourceFile) =
+        Option(java.nio.file.Paths.get(source.path).getParent).map(_.getFileName.toString)
       // don't error on postfix in pre-0.13.18 xsbt/Compat.scala
-      def isSbtCompat =
-        (featureName == "postfixOps" &&
-        (pos.source.path.endsWith("/xsbt/Compat.scala") || pos.source.path.endsWith("""\xsbt\Compat.scala""")) &&
-        Thread.currentThread.getStackTrace.exists(_.getClassName.startsWith("sbt.")))
-      if (required && !isSbtCompat) {
-        reporter.error(pos, msg)
-      } else featureWarning(pos, msg)
+      def isSbtCompat = (featureName == "postfixOps"
+        && pos.source.file.name == "Compat.scala"
+        && parentFileName(pos.source).getOrElse("") == "xsbt"
+        && Thread.currentThread.getStackTrace.exists(_.getClassName.startsWith("sbt."))
+      )
+      if (required && !isSbtCompat) reporter.error(pos, msg) else featureWarning(pos, msg)
     }
 
     /** Has any macro expansion used a fallback during this run? */

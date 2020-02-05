@@ -108,15 +108,23 @@ trait BitSetOps[+C <: BitSet with BitSetOps[C]]
   def iterator: Iterator[Int] = iteratorFrom(0)
 
   def iteratorFrom(start: Int): Iterator[Int] = new AbstractIterator[Int] {
-    private[this] var current = start
-    private[this] val end = nwords * WordLength
-    def hasNext: Boolean = {
-      while (current != end && !self.contains(current)) current += 1
-      current != end
+    private[this] var currentPos = if (start > 0) start >> LogWL else 0
+    private[this] var currentWord = if (start > 0) word(currentPos) & (-1L << (start & (WordLength - 1))) else word(0)
+    final override def hasNext: Boolean = {
+      while (currentWord == 0) {
+        if (currentPos + 1 >= nwords) return false
+        currentPos += 1
+        currentWord = word(currentPos)
+      }
+      true
     }
-    def next(): Int =
-      if (hasNext) { val r = current; current += 1; r }
-      else Iterator.empty.next()
+    final override def next(): Int = {
+      if (hasNext) {
+        val bitPos = java.lang.Long.numberOfTrailingZeros(currentWord)
+        currentWord &= currentWord - 1
+        (currentPos << LogWL) + bitPos
+      } else Iterator.empty.next()
+    }
   }
 
   override def stepper[S <: Stepper[_]](implicit shape: StepperShape[Int, S]): S with EfficientSplit = {
@@ -212,25 +220,22 @@ trait BitSetOps[+C <: BitSet with BitSetOps[C]]
     val a = coll.toBitMask
     val len = a.length
     if (from.isDefined) {
-      var f = from.get
-      var pos = 0
-      while (f >= 64 && pos < len) {
-        f -= 64
-        a(pos) = 0
-        pos += 1
+      val f = from.get
+      val w = f >> LogWL
+      val b = f & (WordLength - 1)
+      if (w >= 0) {
+        java.util.Arrays.fill(a, 0, math.min(w, len), 0)
+        if (b > 0 && w < len) a(w) &= ~((1L << b) - 1)
       }
-      if (f > 0 && pos < len) a(pos) &= ~((1L << f)-1)
     }
     if (until.isDefined) {
       val u = until.get
-      val w = u / 64
-      val b = u % 64
-      var clearw = w+1
-      while (clearw < len) {
-        a(clearw) = 0
-        clearw += 1
+      val w = u >> LogWL
+      val b = u & (WordLength - 1)
+      if (w < len) {
+        java.util.Arrays.fill(a, math.max(w + 1, 0), len, 0)
+        if (w >= 0) a(w) &= (1L << b) - 1
       }
-      if (w < len) a(w) &= (1L << b)-1
     }
     coll.fromBitMaskNoCopy(a)
   }

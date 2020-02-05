@@ -1138,6 +1138,11 @@ trait Types
   case object WildcardType extends ProtoType {
     override def safeToString: String = "?"
     override def kind = "WildcardType"
+
+    /** Equivalent to `List.fill(WildcardType)`, but more efficient as short lists are drawn from a cache. */
+    def fillList(n: Int): List[WildcardType.type] = if (n < FillListCacheLimit) FillListCache(n) else List.fill(n)(WildcardType)
+    private[this] final val FillListCacheLimit = 32
+    private[this] lazy val FillListCache: Array[List[WildcardType.type]] = Array.iterate(List[WildcardType.type](), FillListCacheLimit)(WildcardType :: _)
   }
   /** BoundedWildcardTypes, used only during type inference, are created in
    *  two places that I can find:
@@ -1291,9 +1296,9 @@ trait Types
     private def toWild(tp: Type): Type = tp match {
       case PolyType(tparams, tp) =>
         val undets = tparams ++ origUndets
-        new SubstTypeMap(undets, undets map (_ => WildcardType)).apply(tp)
+        new SubstTypeMap(undets, WildcardType.fillList(undets.length)).apply(tp)
       case tp                    =>
-        new SubstTypeMap(origUndets, origUndets map (_ => WildcardType)).apply(tp)
+        new SubstTypeMap(origUndets, WildcardType.fillList(origUndets.length)).apply(tp)
     }
 
     private lazy val sameTypesFolded = {
@@ -1428,8 +1433,8 @@ trait Types
     }
     override def isGround = sym.isPackageClass || pre.isGround
 
-    private[reflect] var underlyingCache: Type = NoType
-    private[reflect] var underlyingPeriod = NoPeriod
+    @volatile private[reflect] var underlyingCache: Type = NoType
+    @volatile private[reflect] var underlyingPeriod = NoPeriod
     private[Types] def invalidateSingleTypeCaches(): Unit = {
       underlyingCache = NoType
       underlyingPeriod = NoPeriod
@@ -1438,7 +1443,7 @@ trait Types
       val cache = underlyingCache
       if (underlyingPeriod == currentPeriod && cache != null) cache
       else {
-        defineUnderlyingOfSingleType(this)
+        defineUnderlyingOfSingleType(this) // this line is synchronized in runtime reflection
         underlyingCache
       }
     }
@@ -2394,7 +2399,7 @@ trait Types
     private[reflect] var parentsPeriod                 = NoPeriod
     private[reflect] var baseTypeSeqCache: BaseTypeSeq = _
     private[reflect] var baseTypeSeqPeriod             = NoPeriod
-    private[this] var normalized: Type                       = _
+    @volatile private[this] var normalized: Type       = _
 
     //OPT specialize hashCode
     override final def computeHashCode = {
@@ -2515,16 +2520,22 @@ trait Types
     // eta-expand, subtyping relies on eta-expansion of higher-kinded types
     protected def normalizeImpl: Type = if (isHigherKinded) etaExpand else super.normalize
 
-    // TODO: test case that is compiled in a specific order and in different runs
     final override def normalize: Type = {
       // arises when argument-dependent types are approximated (see def depoly in implicits)
       if (pre eq WildcardType) WildcardType
       else if (phase.erasedTypes) normalizeImpl
       else {
-        if (normalized eq null)
-          normalized = normalizeImpl
+        if (normalized eq null) {
+          Types.this.defineNormalized(this)
+        }
         normalized
       }
+    }
+
+    // TODO: test case that is compiled in a specific order and in different runs
+    private[Types] final def defineNormalized: Unit = {
+      if (normalized eq null) // In runtime reflection, this null check is part of double-checked locking
+        normalized = normalizeImpl
     }
 
     override def isGround = (
@@ -2751,6 +2762,10 @@ trait Types
     })
   }
 
+  protected def defineNormalized(tr: TypeRef): Unit = {
+    tr.defineNormalized
+  }
+
   protected def defineParentsOfTypeRef(tpe: TypeRef) = {
     val period = tpe.parentsPeriod
     if (period != currentPeriod) {
@@ -2857,9 +2872,16 @@ trait Types
 
     override def paramTypes = mapList(params)(symTpe) // OPT use mapList rather than .map
 
+    final def resultTypeOwnParamTypes: Type =
+      if (isTrivial || phase.erasedTypes) resultType
+      else resultType0(paramTypes)
+
     override def resultType(actuals: List[Type]) =
       if (isTrivial || phase.erasedTypes) resultType
-      else if (/*isDependentMethodType &&*/ sameLength(actuals, params)) {
+      else resultType0(actuals)
+
+    private def resultType0(actuals: List[Type]): Type =
+      if (/*isDependentMethodType &&*/ sameLength(actuals, params)) {
         val idm = new InstantiateDependentMap(params, actuals)
         val res = idm(resultType).deconst
         existentialAbstraction(idm.existentialsNeeded, res)
@@ -3254,9 +3276,9 @@ trait Types
       bound.decls enter bsym
       bound
     }
-    def unapply(tp: Type): Option[(TypeName, Type)] = tp match {
-      case RefinedType(List(WildcardType), Scope(sym)) => Some((sym.name.toTypeName, sym.info))
-      case _ => None
+    def unapply(tp: Type): Boolean = tp match {
+      case RefinedType(List(WildcardType), scope) => scope.size == 1
+      case _ => false
     }
   }
 
@@ -3594,13 +3616,14 @@ trait Types
               //
               // A more "natural" unifier might be M[t] = [t][t => t]. There's lots of scope for
               // experimenting with alternatives here.
-              val (captured, abstractedArgs) = tpTypeArgs.splitAt(numCaptured)
+              val abstractedArgs = tpTypeArgs.drop(numCaptured)
 
               val (lhs, rhs) =
                 if (isLowerBound) (abstractedArgs, typeArgs)
                 else (typeArgs, abstractedArgs)
 
               isSubArgs(lhs, rhs, params, AnyDepth) && {
+                val captured = tpTypeArgs.take(numCaptured)
                 val clonedParams = abstractedTypeParams.map(_.cloneSymbol(tpSym))
                 addBound(PolyType(clonedParams, appliedType(tp.typeConstructor, captured ++ clonedParams.map(_.tpeHK))))
                 true
@@ -3674,11 +3697,9 @@ trait Types
       if (suspended) tp =:= origin
       else if (instValid) checkIsSameType(tp)
       else isRelatable(tp) && {
-        val newInst = wildcardToTypeVarMap(tp)
-        (constr isWithinBounds newInst) && {
-          setInst(newInst)
-          instValid
-        }
+        // Calling `identityTypeMap` instantiates valid type vars (see `TypeVar.mapOver`).
+        val newInst = identityTypeMap(tp)
+        constr.isWithinBounds(newInst) && setInst(newInst).instValid
       }
     }
 
@@ -4360,7 +4381,7 @@ trait Types
     && isRawIfWithoutArgs(sym)
   )
 
-  def singletonBounds(hi: Type) = TypeBounds.upper(intersectionType(hi :: SingletonClass.tpe :: Nil))
+  def singletonBounds(hi: Type) = TypeBounds.upper(intersectionType(hi :: ListOfSingletonClassTpe))
 
   /**
    * A more persistent version of `Type#memberType` which does not require
@@ -4512,6 +4533,21 @@ trait Types
     var j = tps2
     while (!(i.isEmpty || j.isEmpty)) {
       if (!(i.head =:= j.head))
+        return false
+      i = i.tail
+      j = j.tail
+    }
+    i.isEmpty && j.isEmpty
+  }
+
+  /** Are `tps1` and `tps2` lists of pairwise equivalent symbols according to `_.tpe` ? */
+  def isSameSymbolTypes(syms1: List[Symbol], syms2: List[Symbol]): Boolean = {
+    // OPT: hand inlined (syms1 corresponds syms1)((x, y) (x.tpe =:= y.tpe)) to avoid cost of boolean unboxing (which includes
+    // a null check)
+    var i = syms1
+    var j = syms2
+    while (!(i.isEmpty || j.isEmpty)) {
+      if (!(i.head.tpe =:= j.head.tpe))
         return false
       i = i.tail
       j = j.tail

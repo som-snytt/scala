@@ -15,9 +15,10 @@ package typechecker
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.util.chaining._
 import scala.util.control.Exception.ultimately
 import symtab.Flags._
-import PartialFunction.condOpt
+import PartialFunction.{cond, condOpt}
 import scala.annotation.tailrec
 
 /** An interface to enable higher configurability of diagnostic messages
@@ -169,7 +170,9 @@ trait TypeDiagnostics {
 
     def patternMessage    = "pattern " + tree.tpe.finalResultType + valueParamsString(tree.tpe)
     def exprMessage       = "expression of type " + tree.tpe
-    def overloadedMessage = s"overloaded method $sym with alternatives:\n" + alternativesString(tree)
+    def overloadedMessage =
+      if (sym.isConstructor) s"multiple constructors for ${sym.owner.decodedName}${sym.idString} with alternatives:\n${alternativesString(tree)}"
+      else s"overloaded method ${sym.decodedName} with alternatives:\n${alternativesString(tree)}"
     def moduleMessage     = "" + sym
     def defaultMessage    = moduleMessage + preResultString + tree.tpe
     def applyMessage      = defaultMessage + tree.symbol.locationString
@@ -283,9 +286,7 @@ trait TypeDiagnostics {
 
   // For found/required errors where AnyRef would have sufficed:
   // explain in greater detail.
-  def explainAnyVsAnyRef(found: Type, req: Type): String = {
-    if (AnyRefTpe <:< req) notAnyRefMessage(found) else ""
-  }
+  def explainAnyVsAnyRef(found: Type, req: Type): String = if (AnyRefTpe <:< req) notAnyRefMessage(found).pipe(msg => if (msg.isEmpty) "" else "\n" + msg) else ""
 
   def finalOwners(tpe: Type): Boolean = (tpe.prefix == NoPrefix) || recursivelyFinal(tpe)
 
@@ -570,8 +571,9 @@ trait TypeDiagnostics {
             }
           }
           // e.g. val a = new Foo ; new a.Bar ; don't let a be reported as unused.
-          for (p <- t.tpe.prefix) condOpt(p) {
+          t.tpe.prefix foreach {
             case SingleType(_, sym) => targets += sym
+            case _                  => ()
           }
         }
         super.traverse(t)
@@ -584,9 +586,13 @@ trait TypeDiagnostics {
           && (m.isPrivate || m.isLocalToBlock)
           && !(treeTypes.exists(_.exists(_.typeSymbolDirect == m)))
         )
-      def isSyntheticWarnable(sym: Symbol) = (
-        sym.isDefaultGetter
-        )
+      def isSyntheticWarnable(sym: Symbol) = {
+        def rescindPrivateConstructorDefault: Boolean =
+          cond(nme.splitDefaultGetterName(sym.name)) {
+            case (nme.CONSTRUCTOR, _) => true
+          }
+        sym.isDefaultGetter && !rescindPrivateConstructorDefault
+      }
       def isUnusedTerm(m: Symbol): Boolean = (
         m.isTerm
           && !isSuppressed(m)
@@ -705,7 +711,7 @@ trait TypeDiagnostics {
       }
       if (settings.warnUnusedPatVars) {
         for (v <- unusedPrivates.unusedPatVars)
-          typer.context.warning(v.pos, s"pattern var ${v.name} in ${v.owner} is never used; `${v.name}@_` suppresses this warning")
+          typer.context.warning(v.pos, s"pattern var ${v.name} in ${v.owner} is never used: use a wildcard `_` or suppress this warning with `${v.name}@_`")
       }
       if (settings.warnUnusedParams) {
         def isImplementation(m: Symbol): Boolean = {

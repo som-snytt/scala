@@ -1,4 +1,4 @@
-t278.scala:5: error: overloaded method value a with alternatives:
+t278.scala:5: error: overloaded method a with alternatives:
   => C.this.A => Unit <and>
   => () => Unit
  does not take type parameters
@@ -8,4 +8,4 @@ t278.scala:4: error: method a is defined twice;
   the conflicting method a was defined at line 3:7
   def a = (p:A) => ()
       ^
-two errors found
+2 errors

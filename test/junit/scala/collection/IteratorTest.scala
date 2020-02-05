@@ -631,6 +631,7 @@ class IteratorTest {
 
   @Test def `flatMap is memory efficient in previous element`(): Unit = {
     import java.lang.ref._
+    import scala.util.chaining._
     // Array.iterator holds onto array reference; by contrast, iterating over List walks tail.
     // Avoid reaching seq1 through test class. Avoid testing Array.iterator.
     class C extends Iterable[String] {
@@ -641,11 +642,7 @@ class IteratorTest {
 
         def hasNext = i < ss.length
 
-        def next() =
-          if (hasNext) {
-            val res = ss(i); i += 1; res
-          }
-          else Iterator.empty.next()
+        def next() = if (hasNext) ss(i).tap(_ => i += 1) else Iterator.empty.next()
       }
 
       def apply(i: Int) = ss(i)
@@ -654,13 +651,14 @@ class IteratorTest {
     val seq2 = List("third")
     val it0: Iterator[Int] = Iterator(1, 2)
     lazy val it: Iterator[String] = it0.flatMap {
-      case 1 => seq1.get
-      case _ => check(); seq2
+      case 1 => Option(seq1.get).getOrElse(Nil)
+      case 2 => check(); seq2
+      case _ => ???
     }
 
     def check() = assertNotReachable(seq1.get, it)(())
 
-    def checkHasElement() = assertNotReachable(seq1.get.apply(1), it)(())
+    def checkHasElement() = assertNotReachable(Option(seq1.get).map(_.apply(1)).orNull, it)(())
 
     assert(it.hasNext)
     assertEquals("first", it.next())
@@ -800,4 +798,20 @@ class IteratorTest {
       case _ => Nil
     }, Array.from(1 to 15))
   }
+
+  @Test
+  def `t11807 multiply-merged concat iterators`(): Unit = {
+    val it0 = Array(1).iterator
+    val it1 = Array(2).iterator ++ Array(3).iterator
+    val it2 = it0 ++ it1
+
+    assertEquals(1, it2.next())
+    assertTrue(it2.hasNext)
+
+    val it3 = it2 ++ Array(4).iterator
+    assertEquals(2, it3.next())
+    assertEquals(3, it3.next())
+    assertTrue("concatted tail of it3 should be next", it3.hasNext)
+  }
+
 }

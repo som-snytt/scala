@@ -2,7 +2,7 @@
  * The new, sbt-based build definition for Scala.
  *
  * What you see below is very much work-in-progress. The following features are implemented:
- *   - Compiling all classses for the compiler and library ("compile" in the respective subprojects)
+ *   - Compiling all classes for the compiler and library ("compile" in the respective subprojects)
  *   - Running JUnit ("junit/test"), ScalaCheck ("scalacheck/test"), and partest ("test/it:test") tests
  *   - Creating build/quick with all compiled classes and launcher scripts ("dist/mkQuick")
  *   - Creating build/pack with all JARs and launcher scripts ("dist/mkPack")
@@ -11,10 +11,10 @@
  *
  * You'll notice that this build definition is much more complicated than your typical sbt build.
  * The main reason is that we are not benefiting from sbt's conventions when it comes project
- * layout. For that reason we have to configure a lot more explicitly. I've tried explain in
+ * layout. For that reason we have to configure a lot more explicitly. I've tried to explain in
  * comments the less obvious settings.
  *
- * This nicely leads me to explaining goal and non-goals of this build definition. Goals are:
+ * This nicely leads me to explain the goal and non-goals of this build definition. Goals are:
  *
  *   - to be easy to tweak it in case a bug or small inconsistency is found
  *   - to be super explicit about any departure from standard sbt settings
@@ -67,7 +67,7 @@ lazy val publishSettings : Seq[Setting[_]] = Seq(
 // should not be set directly. It is the same as the Maven version and derived automatically from `baseVersion` and
 // `baseVersionSuffix`.
 globalVersionSettings
-Global / baseVersion       := "2.13.1"
+Global / baseVersion       := "2.13.2"
 Global / baseVersionSuffix := "SNAPSHOT"
 ThisBuild / organization   := "org.scala-lang"
 ThisBuild / homepage       := Some(url("https://www.scala-lang.org"))
@@ -152,6 +152,23 @@ val mimaFilterSettings = Seq {
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.gotoPosWritable1$default$4"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.VectorPointer.nullSlotAndCopy$default$3"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.mutable.HashMap.mapValuesInPlaceImpl"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.RedBlackTree.countInRange"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.util.hashing.MurmurHash3.emptyMapHash"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.util.hashing.MurmurHash3.tuple2Hash"),
+    ProblemFilters.exclude[MissingTypesProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productArity"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.canEqual"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator._2"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator._1"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productIterator"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productPrefix"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productElementNames"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productElementName"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.collection.immutable.MapKeyValueTupleHashIterator.productElement"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("scala.reflect.runtime.SynchronizedTypes.scala$reflect$runtime$SynchronizedTypes$$super$defineNormalized"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.runtime.SynchronizedTypes.defineNormalized"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.runtime.JavaUniverse.defineNormalized"),
+    ProblemFilters.exclude[DirectMissingMethodProblem]("scala.reflect.io.ZipArchive.RootEntry"),
   ),
 }
 
@@ -245,7 +262,8 @@ lazy val commonSettings = instanceSettings ++ clearSourceAndResourceDirectories 
       Map.empty[File,URL]
     }
   },
-  apiURL := Some(url("https://www.scala-lang.org/api/" + versionProperties.value.mavenVersion + "/")),
+  apiURL := None, // set on a per-project basis
+  autoAPIMappings := true,
   pomIncludeRepository := { _ => false },
   pomExtra := {
     <scm>
@@ -436,6 +454,7 @@ lazy val library = configureAsSubproject(project)
       "/project/description" -> <description>Standard library for the Scala Programming Language</description>,
       "/project/packaging" -> <packaging>jar</packaging>
     ),
+    apiURL := Some(url(s"https://www.scala-lang.org/api/${versionProperties.value.mavenVersion}/")),
     mimaPreviousArtifacts := mimaReferenceVersion.value.map(organization.value % name.value % _).toSet,
     mimaCheckDirection := "both",
     mimaFilterSettings,
@@ -468,6 +487,7 @@ lazy val reflect = configureAsSubproject(project)
       "/project/description" -> <description>Compiler for the Scala Programming Language</description>,
       "/project/packaging" -> <packaging>jar</packaging>
     ),
+    apiURL := Some(url(s"https://www.scala-lang.org/api/${versionProperties.value.mavenVersion}/scala-${thisProject.value.id}/")),
     mimaPreviousArtifacts := mimaReferenceVersion.value.map(organization.value % name.value % _).toSet,
     mimaCheckDirection := "both",
     mimaFilterSettings,
@@ -544,7 +564,7 @@ lazy val compiler = configureAsSubproject(project)
       "/project/description" -> <description>Compiler for the Scala Programming Language</description>,
       "/project/packaging" -> <packaging>jar</packaging>
     ),
-    apiURL := None,
+    apiURL := Some(url(s"https://www.scala-lang.org/api/${versionProperties.value.mavenVersion}/scala-${thisProject.value.id}/")),
     pomDependencyExclusions += (("org.scala-lang.modules", "scala-asm"))
   )
   .dependsOn(library, reflect)
@@ -1390,3 +1410,8 @@ def findJar(files: Seq[Attributed[File]], dep: ModuleID): Option[Attributed[File
 whitesourceProduct               := "Lightbend Reactive Platform"
 whitesourceAggregateProjectName  := "scala-2.13-stable"
 whitesourceIgnoredScopes         := Vector("test", "scala-tool")
+
+{
+  scala.build.TravisOutput.installIfOnTravis()
+  Nil
+}

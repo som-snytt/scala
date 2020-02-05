@@ -18,9 +18,11 @@ import scala.runtime.ScalaRunTime.stringOf
 import scala.jdk.CollectionConverters._
 import scala.collection.mutable
 import scala.concurrent.{Await, Awaitable}
+import scala.util.chaining._
 import scala.util.{Failure, Success, Try}
 import scala.util.Properties.isJavaAtLeast
 import scala.util.control.NonFatal
+import java.time.Duration
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.lang.ref._
@@ -60,18 +62,32 @@ object AssertUtil {
     }
   }
 
+  /** Result and elapsed duration.
+   */
+  def timed[A](body: => A): (A, Duration) = {
+    val start = System.nanoTime
+    val result = body
+    val end = System.nanoTime
+    (result, Duration.ofNanos(end - start))
+  }
+
+  /** Elapsed duration.
+   */
+  def elapsed[U](body: => U): Duration = timed(body)._2
+
+  /** Elapsed duration.
+   */
+  def withElapsed[A](f: Duration => Unit)(body: => A): A = timed(body).pipe {
+    case (result, duration) => f(duration) ; result
+  }
+
   /** Check that throwable T (or a subclass) was thrown during evaluation of `body`,
    *  and that its message satisfies the `checkMessage` predicate.
    *  Any other exception is propagated.
    */
   def assertThrows[T <: Throwable: ClassTag](body: => Any,
       checkMessage: String => Boolean = s => true): Unit = {
-    try {
-      body
-      fail("Expression did not throw!")
-    } catch {
-      case e: T if checkMessage(e.getMessage) =>
-    }
+    assertThrown[T](t => checkMessage(t.getMessage))(body)
   }
 
   def assertThrown[T <: Throwable: ClassTag](checker: T => Boolean)(body: => Any): Unit =
@@ -85,7 +101,7 @@ object AssertUtil {
         ae.addSuppressed(failed)
         throw ae
       case NonFatal(other) =>
-        val ae = new AssertionError(s"Exception not a ${implicitly[ClassTag[T]]}: $other")
+        val ae = new AssertionError(s"Wrong exception: expected ${implicitly[ClassTag[T]]} but was ${other.getClass.getName}")
         ae.addSuppressed(other)
         throw ae
     }
@@ -107,25 +123,24 @@ object AssertUtil {
    */
   def assertNotReachable[A <: AnyRef](a: => A, roots: AnyRef*)(body: => Unit): Unit = {
     val wkref = new WeakReference(a)
-    def refs(root: AnyRef): mutable.Set[AnyRef] = {
+    // fail if following strong references from root discovers referent. Quit if ref is empty.
+    def assertNoRef(root: AnyRef): Unit = {
       val seen = new IdentityHashMap[AnyRef, Unit]
       def loop(o: AnyRef): Unit =
         if (wkref.nonEmpty && o != null && !seen.containsKey(o)) {
           seen.put(o, ())
+          assertTrue(s"Root $root held reference $o", o ne wkref.get)
           for {
             f <- o.getClass.allFields
             if !Modifier.isStatic(f.getModifiers)
             if !f.getType.isPrimitive
             if !classOf[Reference[_]].isAssignableFrom(f.getType)
-          } loop(f follow o)
+          } loop(f.follow(o))
         }
       loop(root)
-      seen.keySet.asScala
     }
     body
-    for (r <- roots if wkref.nonEmpty) {
-      assertFalse(s"Root $r held reference", refs(r) contains wkref.get)
-    }
+    roots.foreach(assertNoRef)
   }
 
   /** Assert no new threads, with some margin for arbitrary threads to exit. */

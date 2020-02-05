@@ -13,6 +13,7 @@
 package scala.tools.nsc.backend.jvm
 
 import scala.annotation.switch
+import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 import scala.tools.asm.Opcodes
 import scala.tools.asm.tree.{ClassNode, InnerClassNode}
@@ -64,7 +65,7 @@ abstract class BTypesFromClassfile {
    * be found in the `byteCodeRepository`, the `info` of the resulting ClassBType is undefined.
    */
   def classBTypeFromParsedClassfile(internalName: InternalName): ClassBType = {
-    ClassBType(internalName, fromSymbol = false) { res: ClassBType =>
+    ClassBType(internalName, internalName, fromSymbol = false) { (res: ClassBType, internalName) =>
       byteCodeRepository.classNode(internalName) match {
         case Left(msg) => Left(NoClassBTypeInfoMissingBytecode(msg))
         case Right(c) => computeClassInfoFromClassNode(c, res)
@@ -76,7 +77,7 @@ abstract class BTypesFromClassfile {
    * Construct the [[BTypes.ClassBType]] for a parsed classfile.
    */
   def classBTypeFromClassNode(classNode: ClassNode): ClassBType = {
-    ClassBType(classNode.name, fromSymbol = false) { res: ClassBType =>
+    ClassBType(classNode.name, classNode, fromSymbol = false) { (res: ClassBType, classNode) =>
       computeClassInfoFromClassNode(classNode, res)
     }
   }
@@ -161,13 +162,15 @@ abstract class BTypesFromClassfile {
       // require special handling. Excluding is OK because they are never inlined.
       // Here we are parsing from a classfile and we don't need to do anything special. Many of these
       // primitives don't even exist, for example Any.isInstanceOf.
-      val methodInfos:Map[(String, String),MethodInlineInfo] = classNode.methods.asScala.iterator.map(methodNode => {
+      val methodInfos = new mutable.TreeMap[(String, String), MethodInlineInfo]()
+      classNode.methods.forEach(methodNode => {
         val info = MethodInlineInfo(
           effectivelyFinal                    = BytecodeUtils.isFinalMethod(methodNode),
           annotatedInline                     = false,
           annotatedNoInline                   = false)
-          ((methodNode.name, methodNode.desc), info)
-      }).toMap
+        methodInfos((methodNode.name, methodNode.desc)) = info
+      })
+
       InlineInfo(
         isEffectivelyFinal = BytecodeUtils.isFinalClass(classNode),
         sam = inlinerHeuristics.javaSam(classNode.name),

@@ -198,7 +198,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     this.wildcardExtrapolation
     this.IsDependentCollector
     this.ApproximateDependentMap
-    this.wildcardToTypeVarMap
+    this.identityTypeMap
     this.typeVarToOriginMap
     this.ErroneousCollector
     this.adaptToNewRunMap
@@ -274,6 +274,7 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.DelayedInitClass
     definitions.TypeConstraintClass
     definitions.SingletonClass
+    definitions.ListOfSingletonClassTpe
     definitions.SerializableClass
     definitions.ComparableClass
     definitions.JavaCloneableClass
@@ -295,7 +296,6 @@ trait JavaUniverseForce { self: runtime.JavaUniverse  =>
     definitions.JavaStringBuilderClass
     definitions.JavaStringBufferClass
     definitions.JavaCharSequenceClass
-    definitions.TraversableClass
     definitions.ListModule
     definitions.NilModule
     definitions.SeqModule

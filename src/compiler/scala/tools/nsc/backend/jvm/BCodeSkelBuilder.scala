@@ -113,7 +113,7 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
       val cd = if (isCZStaticModule) {
         // Move statements from the primary constructor following the superclass constructor call to
         // a newly synthesised tree representing the "<clinit>", which also assigns the MODULE$ field.
-        // Because the assigments to both the module instance fields, and the fields of the module itself
+        // Because the assignments to both the module instance fields, and the fields of the module itself
         // are in the <clinit>, these fields can be static + final.
 
         // TODO should we do this transformation earlier, say in Constructors? Or would that just cause
@@ -576,7 +576,8 @@ abstract class BCodeSkelBuilder extends BCodeHelpers {
 
       emitParamNames(mnode, params)
       emitAnnotations(mnode, others)
-      emitParamAnnotations(mnode, params.map(_.annotations))
+      if (params.exists(_.annotations.nonEmpty))
+        emitParamAnnotations(mnode, params.map(_.annotations))
 
     } // end of method initJMethod
 

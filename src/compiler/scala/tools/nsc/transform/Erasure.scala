@@ -107,8 +107,8 @@ abstract class Erasure extends InfoTransform
   private def isTypeParameterInSig(sym: Symbol, initialSymbol: Symbol) = (
     !sym.isHigherOrderTypeParameter &&
     sym.isTypeParameterOrSkolem && (
-      (initialSymbol.enclClassChain.exists(sym isNestedIn _)) ||
-      (initialSymbol.isMethod && initialSymbol.typeParams.contains(sym))
+      (initialSymbol.isMethod && initialSymbol.typeParams.contains(sym)) ||
+      (initialSymbol.ownersIterator.exists(encl => encl.isClass && !encl.hasPackageFlag && sym.isNestedIn(encl)))
     )
   )
 
@@ -365,7 +365,7 @@ abstract class Erasure extends InfoTransform
           else
             jsig(erasure(sym0)(tp), existentiallyBound, toplevel, unboxedVCs)
         case PolyType(tparams, restpe) =>
-          assert(tparams.nonEmpty)
+          assert(tparams.nonEmpty, tparams)
           if (toplevel) polyParamSig(tparams)
           jsig(restpe)
 
@@ -1285,7 +1285,7 @@ abstract class Erasure extends InfoTransform
           treeCopy.Template(tree, parents, noSelfType, addBridgesToTemplate(body, currentOwner))
 
         case Match(selector, cases) =>
-          Match(Typed(selector, TypeTree(selector.tpe)), cases)
+          treeCopy.Match(tree, Typed(selector, TypeTree(selector.tpe)), cases)
 
         case Literal(ct) =>
           // We remove the original tree attachments in pre-erasure to free up memory
