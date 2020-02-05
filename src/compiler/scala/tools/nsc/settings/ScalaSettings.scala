@@ -291,28 +291,25 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
     val allowSkipCoreModuleInit = Choice("allow-skip-core-module-init", "Allow eliminating unused module loads for core modules of the standard library (e.g., Predef, ClassTag).")
     val assumeModulesNonNull    = Choice("assume-modules-non-null",     "Assume loading a module never results in null (happens if the module is accessed in its super constructor).")
     val allowSkipClassLoading   = Choice("allow-skip-class-loading",    "Allow optimizations that can skip or delay class loading.")
-    val inline                  = Choice("inline",                      "Inline method invocations according to -Yopt-inline-heuristics and -opt-inline-from.")
+    //val inline                  = Choice("inlinely",                    "Inline method invocations according to -Yopt-inline-heuristics and -opt-inline-from.").internalOnly()
 
-    // none is not an expanding option, unlike the other l: levels. But it is excluded from -opt:_ below.
-    val lNone = Choice("none",
-      "Disable optimizations. Takes precedence: `-opt:none,+box-unbox` / `-opt:none -opt:box-unbox` don't enable box-unbox.")
+    // none is not an expanding option. It is excluded from -opt:_ below.
+    val lNone = Choice("none", "Disable optimizations. Takes precedence: `-opt:none,+box-unbox` / `-opt:none -opt:box-unbox` don't enable box-unbox.")
 
     private val defaultChoices = List(unreachableCode)
     val lDefault = Choice(
-      "l:default",
+      "default",
       "Enable default optimizations: " + defaultChoices.mkString("", ",", "."),
       expandsTo = defaultChoices)
 
-    private val methodChoices = List(unreachableCode, simplifyJumps, compactLocals, copyPropagation, redundantCasts, boxUnbox, nullnessTracking, closureInvocations, allowSkipCoreModuleInit, assumeModulesNonNull, allowSkipClassLoading)
+    val methodChoices = List(unreachableCode, simplifyJumps, compactLocals, copyPropagation, redundantCasts, boxUnbox, nullnessTracking, closureInvocations, allowSkipCoreModuleInit, assumeModulesNonNull, allowSkipClassLoading)
     val lMethod = Choice(
-      "l:method",
-      "Enable intra-method optimizations: " + methodChoices.mkString("", ",", "."),
+      "method",
+      methodChoices.mkString("Enable intra-method optimizations: ", ",", "."),
       expandsTo = methodChoices)
 
-    private val inlineChoices = List(lMethod, inline)
-    val lInline = Choice("l:inline",
-      "Enable cross-method optimizations (note: inlining requires -opt-inline-from): " + inlineChoices.mkString("", ",", "."),
-      expandsTo = inlineChoices)
+    val lInline = Choice("inline", "Enable cross-method optimizations, inlining from specified locations, as well as intra-method optimizations.")
+    val inline = lInline // alias for now
 
     // "none" is excluded from wildcard expansion so that -opt:_ does not disable all settings
     override def wildcardChoices = super.wildcardChoices.filter(_ ne lNone)
@@ -326,7 +323,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
     helpArg = "optimization",
     descr = "Enable optimizations, `help` for details.",
     domain = optChoices,
-  )
+  ).withPostSetHook(ss => if (ss.contains(optChoices.lInline)) optChoices.methodChoices.foreach(_ => ()))
 
   private def optEnabled(choice: optChoices.Choice) = {
     !opt.contains(optChoices.lNone) && {
@@ -496,7 +493,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
   val future        = BooleanSetting("-Xfuture", "Replaced by -Xsource.").withDeprecationMessage("Not used since 2.13.")
   val optimise      = BooleanSetting("-optimize", "Enables optimizations.")
     .withAbbreviation("-optimise")
-    .withDeprecationMessage("Since 2.12, enables -opt:l:inline -opt-inline-from:**. See -opt:help.")
+    .withDeprecationMessage("Since 2.12, enables -opt:inline:**. This can be dangerous.")
     .withPostSetHook(_ => {
       opt.enable(optChoices.lInline)
       optInlineFrom.value = List("**")
