@@ -17,9 +17,11 @@ import java.io.{Console => _, _}
 import java.lang.reflect.InvocationTargetException
 import java.nio.charset.Charset
 import java.nio.file.{Files, StandardOpenOption}
+import java.util.stream.Collectors
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.reflect.internal.FatalError
 import scala.reflect.internal.util.ScalaClassLoader
 import scala.sys.process.{Process, ProcessLogger}
@@ -447,7 +449,7 @@ class Runner(val testInfo: TestInfo, val suiteRunner: AbstractRunner) {
   /** Source files for the given test file. */
   def sources(file: File): List[File] = (
     if (file.isDirectory)
-      file.listFiles.toList filter (_.isJavaOrScala)
+      Files.walk(file.toPath).collect(Collectors.toList()).asScala.map(_.toFile).filter(_.isJavaOrScala).toList
     else
       List(file)
   )
