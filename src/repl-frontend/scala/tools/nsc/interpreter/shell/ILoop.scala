@@ -863,7 +863,12 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
         case Incomplete =>
           in.completion.reset()
           in.readLine(paste.ContinuePrompt) match {
-            case null => intp.compileString(code) ; None    // EOF, report error
+            case null =>
+              // partial input with no input forthcoming,
+              // so ask again for parse error message.
+              // This happens at EOF of a :load file.
+              intp.interpretFinally(code)
+              None
             case line => in.accumulator += line ; loop()
           }
       }
