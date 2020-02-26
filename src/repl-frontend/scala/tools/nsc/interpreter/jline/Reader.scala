@@ -170,7 +170,7 @@ object Reader {
     }
     //def wordCursor: Int = 0  // offset in current word
     //def wordIndex: Int = 0   // index of current word in tokens
-    import collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     def words: JList[String] = tokens.map(t => line.substring(t.start, t.end)).asJava
   }
 
