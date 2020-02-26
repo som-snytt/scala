@@ -47,7 +47,6 @@ val jolDep            = "org.openjdk.jol"                % "jol-core"           
 val asmDep            = "org.scala-lang.modules"         % "scala-asm"                        % versionProps("scala-asm.version")
 val jlineDep          = "org.jline"                      % "jline"                            % versionProps("jline.version")
 val jansiDep          = "org.fusesource.jansi"           % "jansi"                            % versionProps("jansi.version")
-//val jnaDep            = "net.java.dev.jna"               % "jna"                              % versionProps("jna.version")
 val jlineDeps         = Seq(jlineDep, jansiDep)
 val testInterfaceDep  = "org.scala-sbt"                  % "test-interface"                   % "1.0"
 val diffUtilsDep      = "com.googlecode.java-diff-utils" % "diffutils"                        % "1.3.0"
@@ -1115,11 +1114,9 @@ lazy val dist = (project in file("dist"))
       val targetDir = (buildDirectory in ThisBuild).value / "pack" / "lib"
       val jlineJAR = findJar((dependencyClasspath in Compile).value, jlineDep).get.data
       val jansiJAR = findJar((dependencyClasspath in Compile).value, jansiDep).get.data
-      //val jnaJAR   = findJar((dependencyClasspath in Compile).value, jnaDep).get.data
       val mappings = Seq(
         (jlineJAR, targetDir / "jline.jar"),
         (jansiJAR, targetDir / "jansi.jar"),
-        //(jnaJAR, targetDir / "jna.jar"),
       )
       IO.copy(mappings, CopyOptions() withOverwrite true)
       targetDir
