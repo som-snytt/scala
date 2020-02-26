@@ -91,7 +91,7 @@ trait PresentationCompilation { self: IMain =>
 
   private var lastCommonPrefixCompletion: Option[String] = None
 
-  private abstract class PresentationCompileResult(val compiler: interactive.Global, val inputRange: Position, val cursor: Int, val buf: String) extends PresentationCompilationResult {
+  abstract class PresentationCompileResult(val compiler: interactive.Global, val inputRange: Position, val cursor: Int, val buf: String) extends PresentationCompilationResult {
     val unit: compiler.RichCompilationUnit // depmet broken for constructors, can't be ctor arg
 
     override def cleanup(): Unit = {
