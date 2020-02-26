@@ -35,6 +35,7 @@ import scala.tools.nsc.interpreter.{AbstractOrMissingHandler, Repl, IMain, Phase
 import scala.tools.nsc.interpreter.Results.{Error, Incomplete, Success}
 import scala.tools.nsc.interpreter.StdReplTags._
 import scala.tools.nsc.util.Exceptional.rootCause
+import scala.util.chaining._
 import scala.util.control.ControlThrowable
 import scala.jdk.CollectionConverters._
 
@@ -626,9 +627,9 @@ class ILoop(config: ShellConfig, inOverride: BufferedReader = null,
   }
 
   def withFile[A](filename: String)(action: File => A): Option[A] = intp.withLabel(filename) {
-    val res = Some(File(filename)) filter (_.exists) map action
-    if (res.isEmpty) intp.reporter.warning(NoPosition, s"File `$filename` does not exist.")  // courtesy side-effect
-    res
+    Some(File(filename)).filter(_.exists).map(action).tap(res =>
+      if (res.isEmpty) intp.reporter.warning(NoPosition, s"File `$filename` does not exist.")
+    )
   }
 
   def loadCommand(arg: String): Result = {

@@ -139,6 +139,9 @@ trait Repl extends ReplCore {
   /** TODO resolve scan, parse, compile, interpret, which just indicate how much work to do. */
   def parseString(line: String): Result
 
+  // Error on incomplete input
+  def interpretFinally(line: String): Result
+
   final def beQuietDuring(body: => Unit): Unit = reporter.withoutPrintingResults(body)
 
 
