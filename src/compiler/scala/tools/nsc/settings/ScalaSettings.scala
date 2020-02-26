@@ -251,8 +251,8 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
   val Ymacroexpand    = ChoiceSetting     ("-Ymacro-expand", "policy", "Control expansion of macros, useful for scaladoc and presentation compiler.", List(MacroExpand.Normal, MacroExpand.None, MacroExpand.Discard), MacroExpand.Normal)
   val YmacroFresh     = BooleanSetting    ("-Ymacro-global-fresh-names", "Should fresh names in macros be unique across all compilation units")
   val YmacroAnnotations = BooleanSetting  ("-Ymacro-annotations", "Enable support for macro annotations, formerly in macro paradise.")
-  val Yreplclassbased = BooleanSetting    ("-Yrepl-class-based", "Use classes to wrap REPL snippets instead of objects")
-  val YreplMagicImport = BooleanSetting    ("-Yrepl-use-magic-imports", "In the code the wraps REPL snippes, use magic imports to rather than nesting wrapper object/classes")
+  val Yreplclassbased = BooleanSetting    ("-Yrepl-class-based", "Use classes to wrap REPL snippets instead of objects") withDefault true
+  val YreplMagicImport = BooleanSetting   ("-Yrepl-use-magic-imports", "In the code that wraps REPL snippets, use magic imports rather than nesting wrapper object/classes") withDefault true
   val Yreploutdir     = StringSetting     ("-Yrepl-outdir", "path", "Write repl-generated classfiles to given output directory (use \"\" to generate a temporary dir)" , "")
   @deprecated("Unused setting will be removed", since="2.13")
   val Yreplsync       = new BooleanSetting    ("-Yrepl-sync", "Legacy setting for sbt compatibility, unused.").internalOnly()
@@ -275,6 +275,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
     Deflater.DEFAULT_COMPRESSION, Some((Deflater.DEFAULT_COMPRESSION,Deflater.BEST_COMPRESSION)), (x: String) => None)
   val YpickleJava = BooleanSetting("-Ypickle-java", "Pickler phase should compute pickles for .java defined symbols for use by build tools").internalOnly()
   val YpickleWrite = StringSetting("-Ypickle-write", "directory|jar", "destination for generated .sig files containing type signatures.", "", None).internalOnly()
+  val YpickleWriteApiOnly = BooleanSetting("-Ypickle-write-api-only", "Exclude private members (other than those material to subclass compilation, such as private trait vals) from generated .sig files containing type signatures.").internalOnly()
 
   sealed abstract class CachePolicy(val name: String, val help: String)
   object CachePolicy {
@@ -332,7 +333,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
   val opt = MultiChoiceSetting(
     name = "-opt",
     helpArg = "optimization",
-    descr = "Enable optimizations",
+    descr = "Enable optimizations, `help` for details.",
     domain = optChoices,
   )
 
@@ -407,7 +408,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
   val optWarnings = MultiChoiceSetting(
     name = "-opt-warnings",
     helpArg = "warning",
-    descr = "Enable optimizer warnings",
+    descr = "Enable optimizer warnings, `help` for details.",
     domain = optWarningsChoices,
     default = Some(List(optWarningsChoices.atInlineFailed.name)))
 

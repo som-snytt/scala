@@ -14,8 +14,6 @@ package scala.tools.nsc.classpath
 
 import java.io.{Closeable, File}
 import java.net.URL
-import java.nio.file.{FileSystems, Files}
-import java.util
 
 import scala.reflect.io.{AbstractFile, PlainFile, PlainNioFile}
 import scala.tools.nsc.util.{ClassPath, ClassRepresentation, EfficientClassPath}
@@ -117,7 +115,7 @@ trait JFileDirectoryLookup[FileEntryType <: ClassRepresentation] extends Directo
     //
     // Note this behaviour can be enabled in javac with `javac -XDsortfiles`, but that's only
     // intended to improve determinism of the compiler for compiler hackers.
-    util.Arrays.sort(listing, (o1: File, o2: File) => o1.getName.compareTo(o2.getName))
+    java.util.Arrays.sort(listing, (o1: File, o2: File) => o1.getName.compareTo(o2.getName))
     listing
   }
   protected def getName(f: File): String = f.getName
@@ -232,7 +230,7 @@ final class JrtClassPath(fs: java.nio.file.FileSystem) extends ClassPath with No
 final class CtSymClassPath(ctSym: java.nio.file.Path, release: Int) extends ClassPath with NoSourcePaths with Closeable {
   import java.nio.file.Path, java.nio.file._
 
-  private val fileSystem: FileSystem = FileSystems.newFileSystem(ctSym, null)
+  private val fileSystem: FileSystem = FileSystems.newFileSystem(ctSym, null: ClassLoader)
   private val root: Path = fileSystem.getRootDirectories.iterator.next
   private val roots = Files.newDirectoryStream(root).iterator.asScala.toList
 

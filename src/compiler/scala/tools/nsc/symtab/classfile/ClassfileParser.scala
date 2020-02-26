@@ -709,9 +709,9 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
           while (sig.charAt(index) == '.') {
             accept('.')
             val name = newTypeName(subName(c => c == ';' || c == '<' || c == '.'))
-            val clazz = tpe.member(name)
+            val member = if (tpe.typeSymbol == clazz) instanceScope.lookup(name) else tpe.member(name)
             val dummyArgs = Nil // the actual arguments are added in processClassType
-            val inner = typeRef(pre = tpe, sym = clazz, args = dummyArgs)
+            val inner = typeRef(pre = tpe, sym = member, args = dummyArgs)
             tpe = processClassType(inner)
           }
           accept(';')
@@ -824,6 +824,8 @@ abstract class ClassfileParser(reader: ReusableInstance[ReusableDataReader]) {
           val arg = Literal(Constant("see corresponding Javadoc for more information."))
           sym.addAnnotation(DeprecatedAttr, arg, Literal(Constant("")))
           in.skip(attrLen)
+          if (sym == clazz)
+            staticModule.addAnnotation(DeprecatedAttr, arg, Literal(Constant("")))
 
         case tpnme.ConstantValueATTR =>
           completer.constant = pool.getConstant(u2)

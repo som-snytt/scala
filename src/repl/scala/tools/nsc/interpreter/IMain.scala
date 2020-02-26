@@ -17,9 +17,10 @@ package scala.tools.nsc.interpreter
 import java.io.{PrintWriter, StringWriter, Closeable}
 import java.net.URL
 
-import scala.language.implicitConversions
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.language.implicitConversions
 import scala.reflect.internal.{FatalError, Flags, MissingRequirementError, NoPhase}
 import scala.reflect.runtime.{universe => ru}
 import scala.reflect.{ClassTag, classTag}
@@ -31,12 +32,12 @@ import scala.tools.nsc.reporters.StoreReporter
 import scala.tools.nsc.typechecker.{StructuredTypeStrings, TypeStrings}
 import scala.reflect.internal.util.ScalaClassLoader.URLClassLoader
 import scala.tools.util.PathResolver
-import scala.util.{Try => Trying}
 import scala.tools.nsc.util.{stackTraceString, stringFromWriter}
 import scala.tools.nsc.interpreter.Results.{Error, Incomplete, Result, Success}
 import scala.tools.nsc.util.Exceptional.rootCause
+import scala.util.{Try => Trying}
+import scala.util.chaining._
 import scala.util.control.NonFatal
-import scala.annotation.tailrec
 
 
 /** An interpreter for Scala code.
@@ -310,10 +311,9 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
   def originalPath(name: Name): String   = translateOriginalPath(typerOp path name)
   def originalPath(sym: Symbol): String  = translateOriginalPath(typerOp path sym)
 
-  /** For class based repl mode we use an .INSTANCE accessor. */
-  val readInstanceName = if (isClassBased) ".INSTANCE" else ""
+  val readInstanceName = ".INSTANCE"
   def translateOriginalPath(p: String): String = {
-    if (isClassBased) p.replace(sessionNames.read, sessionNames.read + readInstanceName) else p
+    p.replace(sessionNames.read, sessionNames.read + readInstanceName)
   }
   def flatPath(sym: Symbol): String = {
     val sym1 = if (sym.isModule) sym.moduleClass else sym
@@ -423,7 +423,6 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
   def compileSourcesKeepingRun(sources: SourceFile*) = {
     val run = new Run()
     assert(run.typerPhase != NoPhase, "REPL requires a typer phase.")
-    reporter.reset()
     run compileSources sources.toList
     (!reporter.hasErrors, run)
   }
@@ -508,10 +507,17 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       }
     }
 
-    compile(line, synthetic, fatally).fold(identity, loadAndRunReq)
+    compile(line, synthetic, fatally).fold(identity, loadAndRunReq).tap(res =>
+      // besides regular errors, clear deprecation and feature warnings
+      // so they don't leak from last compilation run into next provisional parse
+      if (res != Incomplete) {
+        reporter.reset()
+        currentRun.reporting.clearAllConditionalWarnings()
+      }
+    )
   }
 
-  // create a Request and compile it
+  // create a Request and compile it if input is complete
   def compile(line: String, synthetic: Boolean): Either[Result, Request] = compile(line, synthetic, fatally = false)
   def compile(line: String, synthetic: Boolean, fatally: Boolean): Either[Result, Request] =
     if (global == null) Left(Error)
@@ -608,7 +614,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
   class ReadEvalPrint(val lineId: Int) {
     def this() = this(freshLineId())
 
-    val packageName = sessionNames.line + lineId
+    val packageName = sessionNames.packageName(lineId)
     val readName    = sessionNames.read
     val evalName    = sessionNames.eval
     val printName   = sessionNames.print
@@ -723,7 +729,6 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       val run = new Run()
       assert(run.typerPhase != NoPhase, "REPL requires a typer phase.")
 
-      reporter.reset()
       run.compileUnits(unit :: Nil)
       val success = !reporter.hasErrors
 
@@ -748,10 +753,10 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
 
     @tailrec
     def loop(tpe: Type, acc: StringBuilder): StringBuilder = tpe match {
-      case NullaryMethodType(resultType)  => acc ++= s": $resultType"
+      case NullaryMethodType(resultType)  => acc ++= s": ${typeToCode(resultType.toString)}"
       case PolyType(tyParams, resultType) => loop(resultType, acc ++= tyParens(tyParams.map(_.defString)))
       case MethodType(params, resultType) => loop(resultType, acc ++= formatParams(params))
-      case other                          => acc ++= s": $other"
+      case other                          => acc ++= s": ${typeToCode(other.toString)}"
     }
 
     loop(tp, new StringBuilder).toString
@@ -789,10 +794,9 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
 
     /** handlers for each tree in this request */
     val handlers: List[MemberHandler] = trees map (memberHandlers chooseHandler _)
-    val definesClass = handlers.exists {
-      case _: ClassHandler => true
-      case _ => false
-    }
+    val definesValueClass = handlers.exists(_.definesValueClass)
+
+    val isClassBased = IMain.this.isClassBased && !definesValueClass
 
     def defHandlers = handlers collect { case x: MemberDefHandler => x }
 
@@ -807,7 +811,6 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       case _                => Nil
     }
 
-
     /** The path of the value that contains the user code. */
     def fullAccessPath = s"${lineRep.readPathInstance}$accessPath"
 
@@ -818,7 +821,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       * append to objectName to access anything bound by request.
       */
     lazy val ComputedImports(headerPreamble, importsPreamble, importsTrailer, accessPath) =
-      exitingTyper(importsCode(referencedNames.toSet, this, definesClass, generousImports))
+      exitingTyper(importsCode(referencedNames.toSet, this, generousImports))
 
 
     private val USER_CODE_PLACEHOLDER = newTermName("$user_code_placeholder$")
@@ -857,7 +860,8 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       // (have to parse importsPreamble + ... + importsTrailer at once)
       // This will be simplified when we stop wrapping to begin with.
       val syntheticStats =
-        parseSynthetic(importsPreamble + s"`$USER_CODE_PLACEHOLDER`" + importsTrailer)
+        parseSynthetic(importsPreamble + s"`$USER_CODE_PLACEHOLDER`" + importsTrailer) ++
+        (if (isClassBased) Nil else List(q"val INSTANCE = this")) // Add a .INSTANCE accessor to the read object, so access is identical to class-based
 
       // don't use empty list of parents, since that triggers a rangepos bug in typer (the synthetic typer tree violates overlapping invariant)
       val parents = List(atPos(wholeUnit.focus)(if (isClassBased) gen.rootScalaDot(tpnme.Serializable) else gen.rootScalaDot(tpnme.AnyRef)))
@@ -935,8 +939,6 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     /** Compile the object file.  Returns whether the compilation succeeded.
       *  If all goes well, the "types" map is computed. */
     def compile: Boolean = {
-      // error counting is wrong, hence interpreter may overlook failure - so we reset
-      reporter.reset()
 
       // compile the object containing the user's code
       lineRep.compile(mkUnit) && {
@@ -975,9 +977,8 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     /** Types of variables defined by this request. */
     lazy val compilerTypeOf = typeMap[Type](x => x) withDefaultValue NoType
     /** String representations of same. */
-    lazy val typeOf         = typeMap[String](tp => exitingTyper{
-      val s = tp.toString
-      if (isClassBased) s.stripPrefix("INSTANCE.") else s
+    lazy val typeOf         = typeMap[String](tp => exitingTyper {
+      tp.toString.stripPrefix("INSTANCE.")
     })
     /** String representations as if a method type. */
     private[this] lazy val defTypeOfMap = typeMap[String](tp => exitingTyper(methodTypeAsDef(tp)))
@@ -1056,7 +1057,7 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
             val i =
               if (s.isModule) {
                 if (inst == null) null
-                else runtimeMirror.reflect((inst reflectModule s.asModule).instance)
+                else runtimeMirror.reflect((runtimeMirror reflectModule s.asModule).instance)
               }
               else if (s.isAccessor) {
                 runtimeMirror.reflect(mirrored.reflectMethod(s.asMethod).apply())
@@ -1146,18 +1147,15 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
     var isIncomplete = false
     val handler = if (fatally) null else (_: Position, _: String) => isIncomplete = true
     currentRun.parsing.withIncompleteHandler(handler) {
-      reporter.reset()
-
       val unit = newCompilationUnit(line, label)
       val trees = newUnitParser(unit).parseStats()
-      if (reporter.hasErrors) Left(Error)
-      else if (reporter.hasWarnings && settings.fatalWarnings) {
+      if (!isIncomplete) 
         currentRun.reporting.summarizeErrors()
-        Left(Error)
-      }
+      if (reporter.hasErrors) Left(Error)
       else if (isIncomplete) Left(Incomplete)
+      else if (reporter.hasWarnings && settings.fatalWarnings) Left(Error)
       else Right((trees, unit.firstXmlPos))
-    }
+    }.tap(_ => if (!isIncomplete) reporter.reset())
   }
 
   /** Does code start with a package definition? */
@@ -1359,6 +1357,10 @@ class IMain(val settings: Settings, parentClassLoaderOverride: Option[ClassLoade
       sym.owner.fullName + "."
     )
   }
+
+  def replStrings: ReplStrings = reporter
+  def nameToCode(s: String)    = replStrings.nameToCode(s)
+  def typeToCode(s: String)    = replStrings.typeToCode(s)
 
   // debugging
   def debugging[T](msg: String)(res: T) = {

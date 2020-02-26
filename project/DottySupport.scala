@@ -2,6 +2,7 @@ package scala.build
 
 import sbt._
 import sbt.Keys._
+import java.io.File
 
 import sbt.librarymanagement.{
   ivy, DependencyResolution, ScalaModuleInfo, UpdateConfiguration, UnresolvedWarningConfiguration
@@ -13,7 +14,7 @@ import sbt.librarymanagement.{
  *  Dotty in .travis.yml.
  */
 object DottySupport {
-  val dottyVersion = "0.21.0-RC1"
+  val dottyVersion = "0.22.0-RC1"
   val compileWithDotty: Boolean =
     Option(System.getProperty("scala.build.compileWithDotty")).map(_.toBoolean).getOrElse(false)
   lazy val commonSettings = Seq(
@@ -24,6 +25,23 @@ object DottySupport {
   lazy val librarySettings = Seq(
     // Needed to compile dotty-library together with scala-library
     compileOrder := CompileOrder.Mixed,
+
+    // Add the dotty-library sources to the sourcepath
+    scalacOptions in Compile := {
+      val old = (scalacOptions in Compile).value
+
+      val (beforeSourcepath, "-sourcepath" :: oldSourcepath :: afterSourcePath) = old.span(_ != "-sourcepath")
+
+      val newSourcepath =
+        ((sourceManaged in Compile).value / "dotty-library-src").getAbsolutePath +
+        File.pathSeparator + oldSourcepath
+
+      beforeSourcepath ++ ("-sourcepath" :: newSourcepath :: afterSourcePath)
+    },
+
+    scalacOptions in Compile ++= Seq(
+      "-Yerased-terms" // needed to compile dotty-library
+    ),
 
     // Some files shouldn't be compiled
     excludeFilter in unmanagedSources ~= (old =>
@@ -41,14 +59,7 @@ object DottySupport {
           val name = file.name
           val path = file.getCanonicalPath
           file.isFile &&
-          (path.endsWith(".scala") || path.endsWith(".java")) &&
-          !file.getCanonicalPath.contains("src-non-bootstrapped") &&
-          // Copies of files already present in the scala-library present until
-          // Dotty switches to 2.13.
-          !path.endsWith("scala/runtime/ModuleSerializationProxy.java") &&
-          !path.endsWith("scala/ValueOf.scala") &&
-          // Corresponding files have been copied in this repo
-          !path.contains("scalaShadowing")
+          (path.endsWith(".scala") || path.endsWith(".java"))
         }
       }
 

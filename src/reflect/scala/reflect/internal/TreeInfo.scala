@@ -111,6 +111,7 @@ abstract class TreeInfo {
       case Apply(Select(free @ Ident(_), nme.apply), _) if free.symbol.name endsWith nme.REIFY_FREE_VALUE_SUFFIX =>
         // see a detailed explanation of this trick in `GenSymbols.reifyFreeTerm`
         free.symbol.hasStableFlag && isPath(free, allowVolatile)
+      case Literal(_)      => true // scala/bug#8855
       case _               => false
     }
 
@@ -529,6 +530,12 @@ abstract class TreeInfo {
   def firstConstructorArgs(stats: List[Tree]): List[Tree] = firstConstructor(stats) match {
     case DefDef(_, _, _, args :: _, _, _) => args
     case _                                => Nil
+  }
+
+  /** The modifiers of the first constructor in `stats`. */
+  def firstConstructorMods(stats: List[Tree]): Modifiers = firstConstructor(stats) match {
+    case DefDef(mods, _, _, _, _, _) => mods
+    case _                           => Modifiers()
   }
 
   /** The value definitions marked PRESUPER in this statement sequence */

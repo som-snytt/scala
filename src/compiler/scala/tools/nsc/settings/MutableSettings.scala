@@ -25,14 +25,15 @@ import scala.reflect.{ClassTag, classTag}
 
 /** A mutable Settings object.
  */
-class MutableSettings(val errorFn: String => Unit)
+class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
               extends scala.reflect.internal.settings.MutableSettings
                  with AbsSettings
                  with ScalaSettings {
+  def this(errorFn: String => Unit) = this(errorFn, DefaultPathFactory)
   type ResultOfTryToSet = List[String]
 
   def withErrorFn(errorFn: String => Unit): MutableSettings = {
-    val settings = new MutableSettings(errorFn)
+    val settings = new MutableSettings(errorFn, pathFactory)
     copyInto(settings)
     settings
   }
@@ -254,8 +255,8 @@ class MutableSettings(val errorFn: String => Unit)
      *  Both directories should exist.
      */
     def add(srcDir: String, outDir: String): Unit = // used in ide?
-      add(checkDir(AbstractFile.getDirectory(srcDir), srcDir),
-          checkDir(AbstractFile.getDirectory(outDir), outDir))
+      add(checkDir(pathFactory.getDirectory(srcDir), srcDir),
+          checkDir(pathFactory.getDirectory(outDir), outDir))
 
     /** Check that dir is exists and is a directory. */
     private def checkDir(dir: AbstractFile, name: String, allowJar: Boolean = false): AbstractFile = (
@@ -271,7 +272,7 @@ class MutableSettings(val errorFn: String => Unit)
      *  be dumped in there, regardless of previous calls to 'add'.
      */
     def setSingleOutput(outDir: String): Unit = {
-      val dst = AbstractFile.getDirectory(outDir)
+      val dst = pathFactory.getDirectory(outDir)
       setSingleOutput(checkDir(dst, outDir, allowJar = true))
     }
 
@@ -344,6 +345,8 @@ class MutableSettings(val errorFn: String => Unit)
    *  Subclasses each define a `value` field of the appropriate type.
    */
   abstract class Setting(val name: String, val helpDescription: String) extends AbsSetting with SettingValue {
+    def withDefault(value: T): this.type = { v = value; this }
+
     /** Will be called after this Setting is set for any extra work. */
     private[this] var _postSetHook: this.type => Unit = (x: this.type) => ()
     override def postSetHook(): Unit = _postSetHook(this)
@@ -561,10 +564,10 @@ class MutableSettings(val errorFn: String => Unit)
     private[nsc] val outputDirs: OutputDirs,
     default: String)
     extends StringSetting("-d", "directory|jar", "destination for generated classfiles.", default, None) {
-      value = default
-      override def value_=(str: String): Unit = {
-        super.value_=(str)
-        try outputDirs.setSingleOutput(str)
+      postSetHook()
+      override def postSetHook(): Unit = {
+        super.postSetHook()
+        try outputDirs.setSingleOutput(value)
         catch { case FatalError(msg) => errorFn(msg) }
       }
   }

@@ -965,7 +965,13 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
           doIt
         }
 
-
+        def matchNullaryLoosely: Boolean = {
+          def test(sym: Symbol) =
+            sym.isJavaDefined ||
+            sym.owner == AnyClass ||
+            sym == Object_clone
+          test(meth) || meth.overrides.exists(test)
+        }
         // (4.2) condition for auto-application by -Xsource level
         //
         // until 2.14: none (assuming condition for (4.3) was not met)
@@ -977,10 +983,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         //          > val vparamSymssOrEmptyParamsFromOverride =
         //          This means an accessor that overrides a Java-defined method gets a MethodType instead of a NullaryMethodType, which breaks lots of assumptions about accessors)
         def checkCanAutoApply(): Boolean = {
-          if (sourceLevel2_14 && !meth.isJavaDefined)
+          if (sourceLevel2_14 && !isPastTyper && !matchNullaryLoosely) {
             context.deprecationWarning(tree.pos, NoSymbol, s"Auto-application to `()` is deprecated. Supply the empty argument list `()` explicitly to invoke method ${meth.decodedName},\n" +
                                                            s"or remove the empty argument list from its definition (Java-defined methods are exempt).\n"+
                                                            s"In Scala 3, an unapplied method like this will be eta-expanded into a function.", "2.14.0")
+          }
           true
         }
 
@@ -1136,8 +1143,16 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             }
             if (!isThisTypeResult && !explicitlyUnit(tree)) context.warning(tree.pos, "discarded non-Unit value")
           }
-          @inline def warnNumericWiden(): Unit =
-            if (!isPastTyper && settings.warnNumericWiden) context.warning(tree.pos, "implicit numeric widening")
+          @inline def warnNumericWiden(tpSym: Symbol, ptSym: Symbol): Unit =
+            if (!isPastTyper) {
+              val isInharmonic = (
+                tpSym == IntClass  && ptSym == FloatClass ||
+                tpSym == LongClass && (ptSym == FloatClass || ptSym == DoubleClass)
+              )
+              if (isInharmonic)
+                context.warning(tree.pos, s"Automatic conversion from ${tpSym.name} to ${ptSym.name} is deprecated (since 2.13.1) because it loses precision. Write `.to${ptSym.name}` instead.")
+              else if (settings.warnNumericWiden) context.warning(tree.pos, "implicit numeric widening")
+            }
 
           // The <: Any requirement inhibits attempts to adapt continuation types to non-continuation types.
           val anyTyped = tree.tpe <:< AnyTpe
@@ -1146,7 +1161,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             case TypeRef(_, UnitClass, _) if anyTyped => // (12)
               warnValueDiscard() ; tpdPos(gen.mkUnitBlock(tree))
             case TypeRef(_, numValueCls, _) if anyTyped && isNumericValueClass(numValueCls) && isNumericSubType(tree.tpe, pt) => // (10) (11)
-              warnNumericWiden() ; tpdPos(Select(tree, s"to${numValueCls.name}"))
+              warnNumericWiden(tree.tpe.widen.typeSymbol, numValueCls) ; tpdPos(Select(tree, s"to${numValueCls.name}"))
             case dealiased if dealiased.annotations.nonEmpty && canAdaptAnnotations(tree, this, mode, pt) => // (13)
               tpd(adaptAnnotations(tree, this, mode, pt))
             case _ =>
@@ -1221,7 +1236,10 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         else if (shouldInsertApply(tree))
           insertApply()
         else if (hasUndetsInMonoMode) { // (9)
-          assert(!context.inTypeConstructorAllowed, context) //@M
+          // This used to have
+          //     assert(!context.inTypeConstructorAllowed, context)
+          // but that's not guaranteed to be true in the face of erroneous code; errors in typedApply might mean we
+          // never get around to inferring them, and they leak out and wind up here.
           instantiatePossiblyExpectingUnit(tree, mode, pt)
         }
         // TODO: we really shouldn't use T* as a first class types (e.g. for repeated case fields), but we can't allow T* to conform to other types (see isCompatible) because that breaks overload resolution
@@ -1587,7 +1605,8 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       if (probe == null) probe = NoSymbol
       probe.initialize
 
-      if (probe.isTrait || inMixinPosition) {
+      def cookIfNeeded(tpt: Tree) = if (context.unit.isJava) tpt modifyType rawToExistential else tpt
+      cookIfNeeded(if (probe.isTrait || inMixinPosition) {
         if (!argssAreTrivial) {
           if (probe.isTrait) ConstrArgsInParentWhichIsTraitError(encodedtpt, probe)
           else () // a class in a mixin position - this warrants an error in `validateParentClasses`
@@ -1617,7 +1636,7 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         // if argss are nullary or empty, then (see the docs for `typedPrimaryConstrBody`)
         // the super call dummy is already good enough, so we don't need to do anything
         if (argssAreTrivial) supertptWithTargs else supertptWithTargs updateAttachment SuperArgsAttachment(argss)
-      }
+      })
     }
 
     /** Typechecks the mishmash of trees that happen to be stuffed into the primary constructor of a given template.
@@ -2155,6 +2174,10 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       val vdef1 = treeCopy.ValDef(vdef, typedMods, sym.name, tpt1, checkDead(context, rhs1)) setType NoType
       if (sym.isSynthetic && sym.name.startsWith(nme.RIGHT_ASSOC_OP_PREFIX))
         rightAssocValDefs += ((sym, vdef1.rhs))
+      if (sym.isSynthetic && sym.owner.isClass && (tpt1.tpe eq UnitTpe) && vdef.hasAttachment[PatVarDefAttachment.type] && sym.isPrivateThis && vdef.mods.isPrivateLocal && !sym.enclClassChain.exists(_.isInterpreterWrapper)) {
+        context.warning(vdef.pos, s"Pattern definition introduces Unit-valued member of ${sym.owner.name}; consider wrapping it in `locally { ... }`.")
+        vdef.removeAttachment[PatVarDefAttachment.type]
+      }
       vdef1
     }
 
@@ -3507,13 +3530,16 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
             isApplicableSafe(context.undetparams, followApply(pre memberType alt), argtypes, pt)
           }
           if (sym.isOverloaded) {
-              // eliminate functions that would result from tupling transforms
-              // keeps alternatives with repeated params
-            val sym1 = sym filter (alt =>
-                 isApplicableBasedOnArity(pre memberType alt, argtypes.length, varargsStar = false, tuplingAllowed = false)
-              || alt.tpe.params.exists(_.hasDefault)
-            )
-            if (sym1 != NoSymbol) sym = sym1
+            // retracted synthetic apply in favor of user-defined apply
+            def isRetracted(alt: Symbol) = alt.isError && alt.isSynthetic
+            // loose arity check: based on args, prefer no tupling, assume no args: _*,
+            // but keep alt with repeated params or default args, this is a loose fitting
+            def isLooseFit(alt: Symbol)  =
+              isApplicableBasedOnArity(pre memberType alt, argtypes.length, varargsStar = false, tuplingAllowed = false) || alt.tpe.params.exists(_.hasDefault)
+            sym.filter(alt => !isRetracted(alt) && isLooseFit(alt)) match {
+              case _: NoSymbol =>
+              case sym1        => sym = sym1
+            }
           }
           if (sym == NoSymbol) fun
           else adaptAfterOverloadResolution(fun setSymbol sym setType pre.memberType(sym), mode.forFunMode)

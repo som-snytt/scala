@@ -2039,7 +2039,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
           setInfo (this.info cloneInfo clone)
           setAnnotations this.annotations
       )
-      this.attachments.all.foreach(clone.updateAttachment)
+      assert(clone.attachments.isEmpty)
+      clone.setAttachments(this.attachments.cloneAttachments)
       if (clone.thisSym != clone)
         clone.typeOfThis = (clone.typeOfThis cloneInfo clone)
 
@@ -2817,10 +2818,16 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       keyString,
       varianceString + nameString + infoString + flagsExplanationString
     )
+
     /** String representation of symbol's definition.  It uses the
      *  symbol's raw info to avoid forcing types.
      */
     def defString = defStringCompose(signatureString)
+
+    def defStringWithoutImplicit = compose(
+      keyString,
+      varianceString + nameString + signatureString + flagsExplanationString
+    )
 
     /** String representation of symbol's definition, using the supplied
      *  info rather than the symbol's.
@@ -3076,7 +3083,15 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   class AliasTypeSymbol protected[Symbols] (initOwner: Symbol, initPos: Position, initName: TypeName)
   extends TypeSymbol(initOwner, initPos, initName) {
     type TypeOfClonedSymbol = TypeSymbol
-    override def variance = if (isLocalToThis) Bivariant else info.typeSymbol.variance
+    override def variance =
+      // A non-applied parameterized type alias can appear in any variance position
+      if (typeParams.nonEmpty)
+        Invariant
+      else if (isLocalToThis)
+        Bivariant
+      else
+        info.typeSymbol.variance
+
     override def isContravariant = variance.isContravariant
     override def isCovariant     = variance.isCovariant
     final override def isAliasType = true

@@ -2162,7 +2162,7 @@ trait Types
 
     override def instantiateTypeParams(formals: List[Symbol], actuals: List[Type]): Type =
       if (isHigherKinded) {
-        if (sameLength(formals intersect typeParams, typeParams))
+        if (typeParams.forall(formals.contains))
           copyTypeRef(this, pre, sym, actuals)
         // partial application (needed in infer when bunching type arguments from classes and methods together)
         else
@@ -2897,7 +2897,12 @@ trait Types
     //TODO this may be generalised so that the only constraint is dependencies are acyclic
     def approximate: MethodType = MethodType(params, resultApprox)
 
-    override def safeToString = paramString(this) + resultType
+    //Format (a: A)(b: B)(implicit c: C, d: D): E
+    override def safeToString = {
+      s"${paramString(this)}${
+        resultType match { case _: MethodType => "" case _ => ": "}
+      }$resultType"
+    }
 
     override def cloneInfo(owner: Symbol) = {
       val vparams = cloneSymbolsAtOwner(params, owner)
@@ -2942,7 +2947,7 @@ trait Types
     override def baseTypeSeqDepth: Depth = resultType.baseTypeSeqDepth
     override def baseClasses: List[Symbol] = resultType.baseClasses
     override def baseType(clazz: Symbol): Type = resultType.baseType(clazz)
-    override def safeToString: String = "=> "+ resultType
+    override def safeToString: String = resultType.toString
     override def kind = "NullaryMethodType"
     override def mapOver(map: TypeMap): Type = {
       val result1 = map(resultType)
@@ -3111,7 +3116,7 @@ trait Types
         // (TODO: clone latter existential with fresh quantifiers -- not covering this case for now)
         val canSharpen = (
              emptyBounds(quant) && !emptyBounds(tparam)
-          && (existentialsInType(tparam.info) intersect quantified).isEmpty
+          && existentialsInType(tparam.info).forall(et => !quantified.contains(et))
         )
 
         val skolemInfo = if (!canSharpen) quant.info else tparam.info.substSym(tpars, quantified)
@@ -4029,14 +4034,17 @@ trait Types
       val result =
         if (isIntersectionTypeForLazyBaseType(original)) intersectionTypeForLazyBaseType(parents)
         else refinedType(parents, owner)
-      val syms1 = decls.toList
-      for (sym <- syms1)
-        result.decls.enter(sym.cloneSymbol(result.typeSymbol).resetFlag(OVERRIDE))
-      val syms2 = result.decls.toList
-      val resultThis = result.typeSymbol.thisType
-      for (sym <- syms2)
-        sym modifyInfo (_ substThisAndSym(original.typeSymbol, resultThis, syms1, syms2))
-
+      if (! decls.isEmpty){
+        val syms1 = decls.toList
+        for (sym <- syms1)
+          result.decls.enter(sym.cloneSymbol(result.typeSymbol).resetFlag(OVERRIDE))
+        val syms2 = result.decls.toList
+        val resultThis = result.typeSymbol.thisType
+        val substThisMap = new SubstThisMap(original.typeSymbol, resultThis)
+        val substMap = new SubstSymMap(syms1, syms2)
+        for (sym <- syms2)
+          sym.modifyInfo(info => substMap.apply(substThisMap.apply(info)))
+      }
       result
     }
 

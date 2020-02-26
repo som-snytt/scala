@@ -1,14 +1,14 @@
 
 scala> :type List[1, 2, 3]
            ^
-       error: wrong number of type parameters for method apply: [A](elems: A*)List[A] in trait IterableFactory
+       error: wrong number of type parameters for method apply: [A](elems: A*): List[A] in trait IterableFactory
 
 
 scala> :type List(1, 2, 3)
 List[Int]
 
 scala> :type def foo[T](x: T) = List(x)
-[T](x: T)List[T]
+[T](x: T): List[T]
 
 scala> :type val bar = List(Set(1))
 List[scala.collection.immutable.Set[Int]]
@@ -17,10 +17,10 @@ scala> :type lazy val bar = Set(Set(1))
 scala.collection.immutable.Set[scala.collection.immutable.Set[Int]]
 
 scala> :type def f[T >: Null, U <: String](x: T, y: U) = Set(x, y)
-[T >: Null, U <: String](x: T, y: U)scala.collection.immutable.Set[Any]
+[T >: Null, U <: String](x: T, y: U): scala.collection.immutable.Set[Any]
 
 scala> :type def x = 1 ; def bar[T >: Null <: AnyRef](xyz: T) = 5
-=> Int <and> [T >: Null <: AnyRef](xyz: T)Int
+Int <and> [T >: Null <: AnyRef](xyz: T): Int
 
 scala> 
 
@@ -35,26 +35,26 @@ Int
 
 scala> :type protected lazy val f = 5
 
-         lazy val $result = $line16.$read.$iw.$iw.f
-                                                  ^
-<synthetic>:4: error: lazy value f cannot be accessed as a member of object $iw from object $eval in package 
+         lazy val $result = $line16.$read.INSTANCE.$iw.f
+                                                       ^
+<synthetic>:4: error: lazy value f cannot be accessed as a member of INSTANCE.$iw from object $eval in package 
         Access to protected lazy value f not permitted because
         enclosing object $eval in package $line16 is not a subclass of
-        object $iw where target is defined
+        class $iw where target is defined
 
 (To diagnose errors in synthetic code, try adding `// show` to the end of your input.)
 
 
 scala> :type def f = 5
-=> Int
+Int
 
 scala> :type def f() = 5
-()Int
+(): Int
 
 scala> 
 
 scala> :type def g[T](xs: Set[_ <: T]) = Some(xs.head)
-[T](xs: Set[_ <: T])Some[T]
+[T](xs: Set[_ <: T]): Some[T]
 
 scala> 
 
@@ -91,7 +91,7 @@ TypeRef(
 
 scala> :type -v def f[T >: Null, U <: String](x: T, y: U) = Set(x, y)
 // Type signature
-[T >: Null, U <: String](x: T, y: U)scala.collection.immutable.Set[Any]
+[T >: Null, U <: String](x: T, y: U): scala.collection.immutable.Set[Any]
 
 // Internal Type structure
 PolyType(
@@ -110,7 +110,7 @@ PolyType(
 
 scala> :type -v def x = 1 ; def bar[T >: Null <: AnyRef](xyz: T) = 5
 // Type signature
-=> Int <and> [T >: Null <: AnyRef](xyz: T)Int
+Int <and> [T >: Null <: AnyRef](xyz: T): Int
 
 // Internal Type structure
 OverloadedType(
@@ -163,7 +163,7 @@ TypeRef(
 
 scala> :type -v def f[T <: AnyVal] = List[T]().combinations _
 // Type signature
-[T <: AnyVal]=> Int => Iterator[List[T]]
+[T <: AnyVal]Int => Iterator[List[T]]
 
 // Internal Type structure
 PolyType(
@@ -195,7 +195,7 @@ PolyType(
 
 scala> :type -v def f[T, U >: T](x: T, y: List[U]) = x :: y
 // Type signature
-[T, U >: T](x: T, y: List[U])List[U]
+[T, U >: T](x: T, y: List[U]): List[U]
 
 // Internal Type structure
 PolyType(

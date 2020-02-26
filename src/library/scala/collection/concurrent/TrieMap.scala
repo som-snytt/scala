@@ -617,7 +617,7 @@ private[collection] final class CNode[K, V](val bitmap: Int, val array: Array[Ba
     new CNode[K, V](bmp, tmparray, gen).toContracted(lev)
   }
 
-  private[concurrent] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
+  def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
 
   private def collectLocalElems: Seq[String] = array.flatMap({
     case sn: SNode[K, V] => Iterable.single(sn.kvPair._2.toString)
@@ -1002,6 +1002,7 @@ final class TrieMap[K, V] private (r: AnyRef, rtupd: AtomicReferenceFieldUpdater
     else cachedSize()
   override def isEmpty: Boolean = size == 0
   override protected[this] def className = "TrieMap"
+  override def toString: String = mkString(className + "(", ", ", ")")
 
 }
 
