@@ -1,0 +1,19 @@
+
+scala> :paste < DONE
+// Entering paste mode (DONE to finish)
+
+import X._
+object X {
+  def x = 42
+}
+DONE
+
+// Exiting paste mode, now interpreting.
+
+import X._
+object X
+
+scala> x
+val res0: Int = 42
+
+scala> :quit

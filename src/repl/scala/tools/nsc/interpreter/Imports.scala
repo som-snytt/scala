@@ -115,34 +115,9 @@ trait Imports {
     case class ReqAndHandler(req: Request, handler: MemberHandler)
 
     def reqsToUse: List[ReqAndHandler] = {
-      /** Loop through a list of MemberHandlers and select which ones to keep.
-       *  'wanted' is the set of names that need to be imported.
-       */
-      def select(reqs: List[ReqAndHandler], wanted: Set[Name]): List[ReqAndHandler] = {
-        // Single symbol imports might be implicits! See bug #1752.  Rather than
-        // try to finesse this, we will mimic all imports for now.
-        def keepHandler(handler: MemberHandler) = handler match {
-          case _: ImportHandler     => true
-          case x if generousImports => x.definesImplicit || (x.definedNames exists (d => wanted.exists(w => d.startsWith(w))))
-          case x                    => x.definesImplicit || (x.definedNames exists wanted)
-        }
-
-        reqs match {
-          case Nil                                    => predefEscapes = wanted contains PredefModule.name ; Nil
-          case rh :: rest if !keepHandler(rh.handler) => select(rest, wanted)
-          case rh :: rest                             =>
-            import rh.handler._
-            val augment = rh match {
-              case ReqAndHandler(_, _: ImportHandler) => referencedNames            // for "import a.b", add "a" to names to be resolved
-              case _ => Nil
-            }
-            val newWanted = wanted ++ augment diff definedNames.toSet diff importedNames.toSet
-            rh :: select(rest, newWanted)
-        }
-      }
-
-      /** Flatten the handlers out and pair each with the original request */
-      select(allReqAndHandlers.reverseIterator.map { case (r, h) => ReqAndHandler(r, h) }.toList, wanted).reverse
+      val (res, leftovers) = requestsFromHistory(wanted, generousImports)
+      predefEscapes = leftovers(PredefModule.name)
+      res.map { case (r, h) => ReqAndHandler(r, h) }
     }
 
     def addLevelChangingImport() = code.append(s"import _root_.scala.tools.nsc.interpreter.`${INTERPRETER_IMPORT_LEVEL_UP}`\n")
@@ -224,8 +199,61 @@ trait Imports {
     ComputedImports(computedHeader, code.toString, trailingBraces.toString, accessPath.toString)
   }
 
-  private def allReqAndHandlers =
-    prevRequestList flatMap (req => req.handlers map (req -> _))
+  /** Scan request history for previous snippets which satisfy references.
+   *  'wanted' is the set of names that need to be imported (for the current snippet).
+   *  Result is a list of member handlers (paired with their request), and unsatisfied references.
+   */
+  private def requestsFromHistory(wanted: Set[Name], generousImports: Boolean): (List[(Request, MemberHandler)], Set[Name]) = {
+    val requests  = prevRequestList.reverseIterator
+    val remaining = mutable.Set.empty[Name].addAll(wanted)
+    val required  = mutable.ListBuffer.empty[(Request, MemberHandler)]
+
+    def important(handler: MemberHandler): Boolean =
+      handler match {
+        //case _: ImportHandler => handler.importedNames.exists(remaining)
+        case _: ImportHandler =>
+          handler.importedNames.foreach(n => println(s"$handler imps $n"))
+          handler.importedNames.exists(remaining)
+        case _                => handler.definedNames.exists(remaining)
+      }
+
+    while (remaining.nonEmpty && requests.hasNext) {
+      val request = requests.next()
+      val used    = mutable.Set.empty[MemberHandler]
+      def use(handler: MemberHandler): Unit = {
+        remaining.subtractAll(handler.definedNames)
+        remaining.subtractAll(handler.importedNames)
+        remaining.addAll(handler.referencedNames)
+        required.addOne((request, handler))
+        used.addOne(handler)
+      }
+      // import from requests that satisfy required names.
+      // repeat in case the request references names that can be satisfied by this request.
+      def addImportantHandlers(): Unit = {
+        var done = false
+        while (!done)
+          request.handlers.find(important) match {
+            case Some(handler) => use(handler)
+            case None          => done = true
+          }
+      }
+      // of unused handlers, take all imports (which might supply implicits), anything defining an implicit,
+      // and close name matches (under generousImports flag)
+      def addMaybeImportantHandlers(): Unit = {
+        val more = request.handlers.filterNot(used).filter {
+          case _: ImportHandler => true
+          case handler => handler.definesImplicit || generousImports && handler.definedNames.exists(dn => remaining.exists(dn.startsWith))
+        }
+        if (!more.isEmpty) {
+          more.foreach(use)
+          addImportantHandlers()          // second pass
+        }
+      }
+      addImportantHandlers()
+      addMaybeImportantHandlers()
+    }
+    (required.reverseIterator.toList, remaining.toSet)
+  }
 
   private def membersAtPickler(sym: Symbol): List[Symbol] =
     enteringPickler(sym.info.nonPrivateMembers.toList)
