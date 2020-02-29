@@ -2777,6 +2777,32 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
     /** String representation of symbol's definition following its name */
     final def infoString(tp: Type): String = {
+      def loop(tp: Type, followsParens: Boolean): String = {
+        def isStructuralThisType = owner.isInitialized && owner.isStructuralRefinement && tp == owner.tpe        // scala/bug#8158
+        // colon+space, preceded by an extra space if needed to prevent the colon glomming onto a symbolic name
+        def postnominalColon: String = if (!followsParens && name.isOperatorName) " : " else ": "
+        def parents = if (settings.debug) parentsString(tp.parents) else briefParentsString(tp.parents)
+        def typeRest =
+          if (isClass) " extends " + parents
+          else if (isAliasType) " = " + tp.resultType
+          else tp.resultType match {
+            case rt@TypeBounds(_, _) => "" + rt
+            case rt => " <: " + rt
+          }
+        tp match {
+          case _ if isType               => typeParamsString(tp) + typeRest
+          case _ if isModule             => "" //  avoid "object X of type X.type"
+          case PolyType(tparams, res)    => typeParamsString(tp) + loop(res, followsParens = true)
+          case NullaryMethodType(res)    => loop(res, followsParens = false)
+          case MethodType(params, res)   => valueParamsString(tp) + loop(res, followsParens = true)
+          case _ if isStructuralThisType => postnominalColon + owner.name
+          case _                         => postnominalColon + tp
+        }
+      }
+      loop(tp, followsParens = false)
+    }
+    /*
+    final def infoString(tp: Type): String = {
       def parents = (
         if (settings.debug.value) parentsString(tp.parents)
         else briefParentsString(tp.parents)
@@ -2802,6 +2828,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
         case _                         => ": " + tp
       }
     }
+    */
 
     def infosString = infos.toString
     def debugLocationString = {
