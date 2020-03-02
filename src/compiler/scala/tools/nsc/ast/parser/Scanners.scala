@@ -70,6 +70,9 @@ trait ScannersCommon {
     def error(off: Offset, msg: String): Unit
     def incompleteInputError(off: Offset, msg: String): Unit
     def deprecationWarning(off: Offset, msg: String, since: String): Unit
+
+    // advance past COMMA NEWLINE RBRACE (to whichever token is the matching close bracket)
+    def skipTrailingComma(right: Token): Boolean = false
   }
 
   // Hooks for ScaladocUnitScanner and ScaladocJavaUnitScanner
@@ -303,6 +306,17 @@ trait Scanners extends ScannersCommon {
       }
     }
 
+    def lookingAhead[A](body: => A): A = {
+      val saved = new ScannerData {} copyFrom this
+      val aLIO = allowLeadingInfixOperators
+      allowLeadingInfixOperators = false
+      nextToken()
+      try body finally {
+        this copyFrom saved
+        allowLeadingInfixOperators = aLIO
+      }
+    }
+
     /** read next token and return last offset
      */
     def skipToken(): Offset = {
@@ -310,6 +324,21 @@ trait Scanners extends ScannersCommon {
       nextToken()
       off
     }
+
+    // used by parser to distinguish pattern P(_*, p) from trailing comma.
+    // EOF is accepted for REPL, which can't look ahead past the current line.
+    def isTrailingComma(right: Token): Boolean =
+      token == COMMA && lookingAhead(afterLineEnd() && token == right || token == EOF)
+
+    override def skipTrailingComma(right: Token): Boolean =
+      if (token == COMMA) {
+        // SIP-27 Trailing Comma (multi-line only) support
+        // If a comma is followed by a new line & then a closing paren, bracket or brace
+        // then it is a trailing comma and is ignored
+        val saved = new ScannerData {} copyFrom this
+        fetchToken()
+        if (!afterLineEnd() || token != right) { copyFrom(saved) ; false } else true
+      } else false
 
     /** Allow an otherwise deprecated ident here */
     private var allowIdent: Name = nme.EMPTY
@@ -347,6 +376,7 @@ trait Scanners extends ScannersCommon {
 
           discardDocBuffer()
         case RBRACKET | RPAREN =>
+          println(s"Saw rparen")
           if (!sepRegions.isEmpty && sepRegions.head == lastToken)
             sepRegions = sepRegions.tail
 
@@ -380,17 +410,6 @@ trait Scanners extends ScannersCommon {
         next.token = EMPTY
       }
 
-      def lookingAhead[A](body: => A): A = {
-        val saved = new ScannerData {} copyFrom this
-        val aLIO = allowLeadingInfixOperators
-        allowLeadingInfixOperators = false
-        nextToken()
-        try body finally {
-          this copyFrom saved
-          allowLeadingInfixOperators = aLIO
-        }
-      }
-
       def isSimpleExprIntroToken(token: Token): Boolean = token match {
         case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
              STRINGLIT | INTERPOLATIONID | SYMBOLLIT | TRUE | FALSE | NULL | // literals
@@ -400,6 +419,7 @@ trait Scanners extends ScannersCommon {
       }
 
       def insertNL(nl: Token): Unit = {
+        println(s"insertNL!")
         next.copyFrom(this)
         //  todo: make offset line-end of previous line?
         offset = if (lineStartOffset <= offset) lineStartOffset else lastLineStartOffset
@@ -427,6 +447,7 @@ trait Scanners extends ScannersCommon {
        */
       if (!applyBracePatch() && afterLineEnd() && inLastOfStat(lastToken) && inFirstOfStat(token) &&
           (sepRegions.isEmpty || sepRegions.head == RBRACE)) {
+        println(s"insertNL?")
         if (pastBlankLine()) insertNL(NEWLINES)
         else if (!isLeadingInfixOperator) insertNL(NEWLINE)
         else if (!currentRun.isScala214) {
@@ -466,19 +487,7 @@ trait Scanners extends ScannersCommon {
           next copyFrom this
           this copyFrom prev
         }
-      } else if (token == COMMA) {
-        // SIP-27 Trailing Comma (multi-line only) support
-        // If a comma is followed by a new line & then a closing paren, bracket or brace
-        // then it is a trailing comma and is ignored
-        val saved = new ScannerData {} copyFrom this
-        fetchToken()
-        if (afterLineEnd() && (token == RPAREN || token == RBRACKET || token == RBRACE)) {
-          /* skip the trailing comma */
-        } else if (token == EOF) { // e.g. when the REPL is parsing "val List(x, y, _*,"
-          /* skip the trailing comma */
-        } else this copyFrom saved
       }
-
 //      print("["+this+"]")
     }
 

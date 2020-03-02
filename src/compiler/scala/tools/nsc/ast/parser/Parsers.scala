@@ -22,6 +22,7 @@ import scala.reflect.internal.{Precedence, ModifierFlags => Flags}
 import scala.reflect.internal.util.{ SourceFile, Position, FreshNameCreator, ListOfNil }
 import Tokens._
 import scala.annotation.tailrec
+import scala.util.chaining._
 
 /** Historical note: JavaParsers started life as a direct copy of Parsers
  *  but at a time when that Parsers had been replaced by a different one.
@@ -55,42 +56,36 @@ trait ParsersCommon extends ScannersCommon { self =>
      *  instead of the contents of the groupers.  However in all cases accept(LPAREN)
      *  will be called, so a parse error will still result.  If the grouping is
      *  optional, in.token should be tested before calling these methods.
+     *
+     *  Skip trailing comma is pushed down to scanner because this abstract parser
+     *  doesn't have token info.
      */
-    @inline final def inParens[T](body: => T): T = {
-      accept(LPAREN)
-      val ret = body
-      accept(RPAREN)
-      ret
+    @inline final def inGroupers[T](left: Token)(body: => T): T = {
+      new Throwable(s"grouping $left").printStackTrace()
+      accept(left)
+      try body
+      finally {
+        println(s"after body to ${in}")
+        val b =
+        in.skipTrailingComma(left + 1)
+        if (b) println(s"skippedTC")
+        println(s"before accept ${left+1} at ${in}")
+        accept(left + 1)
+        println(s"accept ${left+1} to ${in}")
+      }
     }
-    @inline final def inParensOrError[T](body: => T, alt: T): T =
-      if (in.token == LPAREN) inParens(body)
-      else { accept(LPAREN) ; alt }
-
-    @inline final def inParensOrUnit[T](body: => Tree): Tree = inParensOrError(body, literalUnit)
+    @inline final def inParens[T](body: => T): T                  = inGroupers(LPAREN)(body)
+    @inline final def inParensOrError[T](body: => T, alt: T): T   = if (in.token == LPAREN) inParens(body) else { accept(LPAREN) ; alt }
+    @inline final def inParensOrUnit[T](body: => Tree): Tree      = inParensOrError(body, literalUnit)
     @inline final def inParensOrNil[T](body: => List[T]): List[T] = inParensOrError(body, Nil)
 
-    @inline final def inBraces[T](body: => T): T = {
-      accept(LBRACE)
-      val ret = body
-      accept(RBRACE)
-      ret
-    }
-    @inline final def inBracesOrError[T](body: => T, alt: T): T =
-      if (in.token == LBRACE) inBraces(body)
-      else { accept(LBRACE) ; alt }
-
+    @inline final def inBraces[T](body: => T): T                  = inGroupers(LBRACE)(body)
+    @inline final def inBracesOrError[T](body: => T, alt: T): T   = if (in.token == LBRACE) inBraces(body) else { accept(LBRACE) ; alt }
     @inline final def inBracesOrNil[T](body: => List[T]): List[T] = inBracesOrError(body, Nil)
-    @inline final def inBracesOrUnit[T](body: => Tree): Tree = inBracesOrError(body, literalUnit)
-    @inline final def dropAnyBraces[T](body: => T): T =
-      if (in.token == LBRACE) inBraces(body)
-      else body
+    @inline final def inBracesOrUnit[T](body: => Tree): Tree      = inBracesOrError(body, literalUnit)
+    @inline final def dropAnyBraces[T](body: => T): T             = if (in.token == LBRACE) inBraces(body) else body
 
-    @inline final def inBrackets[T](body: => T): T = {
-      accept(LBRACKET)
-      val ret = body
-      accept(RBRACKET)
-      ret
-    }
+    @inline final def inBrackets[T](body: => T): T                = inGroupers(LBRACKET)(body)
 
     /** Creates an actual Parens node (only used during parsing.)
      */
@@ -609,6 +604,7 @@ self =>
     /** Consume one token of the specified type, or signal an error if it is not there. */
     def accept(token: Token): Offset = {
       val offset = in.offset
+      println(s"At ${in.offset} is ${token2string(in.token)}, accepting ${token2string(token)}")
       if (in.token != token) {
         syntaxErrorOrIncomplete(expectedMsg(token), skipIt = false)
         if ((token == RPAREN || token == RBRACE || token == RBRACKET))
@@ -785,21 +781,48 @@ self =>
       }
     }
 
-    /** {{{ part { `sep` part } }}},or if sepFirst is true, {{{ { `sep` part } }}}. */
-    final def tokenSeparated[T](separator: Token, sepFirst: Boolean, part: => T): List[T] = {
-      val ts = new ListBuffer[T]
-      if (!sepFirst)
-        ts += part
+    def requireGroupers[A](body: => A): A = {
+      def isBracketed = in.sepRegions.head match { case RPAREN | RBRACE | RBRACKET => true case _ => false }
+      require(in.sepRegions.nonEmpty)
+      require(isBracketed)
+      body
+    }
 
+    /** {{{ part { `sep` part } }}}. */
+    final def tokenSeparated[T](separator: Token, part: => T): List[T] = {
+      println(s"tokenSep at ${in.offset} of ${token2string(separator)}")
+      val ts   = ListBuffer.empty[T].addOne(part)
+      var done = in.token != separator
+      while (!done) {
+        val skippable = separator == COMMA && in.sepRegions.nonEmpty && in.isTrailingComma(in.sepRegions.head)
+        if (!skippable) {
+          in.nextToken()
+          ts += part
+          println(s"not skipped, tokenSep at ${in.offset} of ${token2string(separator)}")
+        }
+        if (skippable) println(s"skipp comma")
+        done = (in.token != separator) || skippable
+        println(s"done? $done tokenSep at ${in.offset} of ${token2string(separator)}")
+      }
+      println(s"toksep ${token2string(separator)} count ${ts.size} at ${token2string(in.token)}")
+      ts.toList
+    }
+
+    @inline final def commaSeparated[T](part: => T): List[T] = tokenSeparated(COMMA, part)
+
+    /** {{{ { `sep` part } }}}. */
+    final def separatedToken[T](separator: Token, part: => T): List[T] = {
+      require(separator != COMMA)
+      val ts = ListBuffer.empty[T]
       while (in.token == separator) {
         in.nextToken()
         ts += part
       }
       ts.toList
     }
-    @inline final def commaSeparated[T](part: => T): List[T] = tokenSeparated(COMMA, sepFirst = false, part)
-    @inline final def caseSeparated[T](part: => T): List[T] = tokenSeparated(CASE, sepFirst = true, part)
-    def readAnnots(part: => Tree): List[Tree] = tokenSeparated(AT, sepFirst = true, part)
+
+    @inline final def caseSeparated[T](part: => T): List[T] = separatedToken(CASE, part)
+    def readAnnots(part: => Tree): List[Tree] = separatedToken(AT, part)
 
     /** Create a tuple type Tree. If the arity is not supported, a syntax error is emitted. */
     def makeSafeTupleType(elems: List[Tree]) = {
@@ -975,27 +998,44 @@ self =>
       def argType(): Tree
       def functionArgType(): Tree
 
+      // () must be () => R, otherwise (types) could be tuple or (types) => R
       private def tupleInfixType(start: Offset) = {
-        in.nextToken()
-        if (in.token == RPAREN) {
+        require(in.token == LPAREN)
+        if (lookingAhead(in.token == RPAREN)) {
+          in.nextToken()
           in.nextToken()
           atPos(start, accept(ARROW)) { makeFunctionTypeTree(Nil, typ()) }
         }
         else {
+          println(s"before tuple types is ${token2string(in.token)} at ${in.offset}")
+          in.nextToken()
           val ts = functionTypes()
           accept(RPAREN)
+          println(s"after tuple types is ${token2string(in.token)} at ${in.offset}")
+          /*
+          //val ts = inParens(functionTypes())
+          val ts = inParens {
+            println(s"before ftypes is ${token2string(in.token)} at ${in.offset}")
+            val r = 
+            functionTypes()
+            println(s"after ftypes is ${token2string(in.token)} at ${in.offset}")
+            r
+          }
+          println(s"types $ts, at ${token2string(in.token)}")
+          */
           if (in.token == ARROW)
             atPos(start, in.skipToken()) { makeSafeFunctionType(ts, typ()) }
           else {
             ts foreach checkNotByNameOrVarargs
             val tuple = atPos(start) { makeSafeTupleType(ts) }
+            println(s"after makesafe is ${token2string(in.token)} at ${in.offset}")
             infixTypeRest(
               compoundTypeRest(
                 annotTypeRest(
                   simpleTypeRest(
                     tuple))),
               InfixMode.FirstOp
-            )
+              ).tap(res => println(s"tuple res $res, at ${token2string(in.token)}"))
           }
         }
       }
@@ -1019,6 +1059,7 @@ self =>
        *  }}}
        */
       def typ(): Tree = placeholderTypeBoundary {
+        println(s"typ at ${token2string(in.token)}")
         val start = in.offset
         val t =
           if (in.token == LPAREN) tupleInfixType(start)
@@ -1099,6 +1140,7 @@ self =>
       )
 
       def compoundTypeRest(t: Tree): Tree = {
+        println(s"compound at ${in.offset}")
         val ts = new ListBuffer[Tree] += t
         while (in.token == WITH) {
           in.nextToken()
@@ -1148,6 +1190,7 @@ self =>
           else
             mkOp(infixType(InfixMode.RightOp))
         }
+        println(s"infix rest id? $isIdent at ${in.offset}")
         if (isIdent) checkRepeatedParam orElse asInfix
         else t
       }
@@ -1163,8 +1206,8 @@ self =>
        *  Types ::= Type {`,` Type}
        *  }}}
        */
-      def types(): List[Tree] = commaSeparated(argType())
-      def functionTypes(): List[Tree] = commaSeparated(functionArgType())
+      def types(): List[Tree] = commaSeparated(requireGroupers(argType()))
+      def functionTypes(): List[Tree] = commaSeparated(requireGroupers(functionArgType()))
     }
 
     /** Assumed (provisionally) to be TermNames. */
@@ -1741,7 +1784,9 @@ self =>
           case USCORE =>
             freshPlaceholder()
           case LPAREN =>
-            atPos(in.offset)(makeParens(commaSeparated(expr())))
+            //atPos(in.offset)(makeParens(commaSeparated(expr())))
+            atPos(in.offset)(makeParens(commaSeparated(expr().tap(x=>println(s"X at ${in.offset}"))).tap(cs=>println(s"cs at ${in.offset}"))))
+              .tap { lp => println(s"simple $lp at ${token2string(in.token)}"); new Throwable("X").printStackTrace() }
           case LBRACE =>
             canApply = false
             blockExpr()
@@ -2007,21 +2052,19 @@ self =>
        *                |   Pattern3
        *  }}}
        */
-      def pattern2(): Tree = (pattern3(), in.token) match {
-        case (Ident(nme.WILDCARD), AT) =>
-          in.nextToken()
-          pattern3()
-        case (p @ Ident(name), AT) =>
+      def pattern2(): Tree = pattern3() match {
+        case p @ Ident(name) if in.token == AT =>
           in.nextToken()
           val body = pattern3()
-          atPos(p.pos.start, p.pos.start, body.pos.end) {
+          if (name == nme.WILDCARD) body
+          else atPos(p.pos.start, p.pos.start, body.pos.end) {
             val t = Bind(name, body)
             body match {
               case Ident(nme.WILDCARD) if settings.warnUnusedPatVars => t updateAttachment NoWarnAttachment
               case _ => t
             }
           }
-        case (p, _) => p
+        case p => p
       }
 
       /** {{{
@@ -2036,6 +2079,7 @@ self =>
         def isCloseDelim = in.token match {
           case RBRACE => isXML
           case RPAREN => !isXML
+          case COMMA  => !isXML && in.isTrailingComma(RPAREN)
           case _      => false
         }
         def checkWildStar: Tree = top match {
@@ -2302,7 +2346,7 @@ self =>
       var implicitOffset  = -1
       var warnAt          = -1
       var caseParam       = ofCaseClass
-      val vds   = new ListBuffer[List[ValDef]]
+      val vds   = ListBuffer.empty[List[ValDef]]
       val start = in.offset
       def paramClause(): List[ValDef] = if (in.token == RPAREN) Nil else {
         val implicitmod =
@@ -2316,9 +2360,7 @@ self =>
       }
       newLineOptWhenFollowedBy(LPAREN)
       while (in.token == LPAREN) {
-        in.nextToken()
-        vds += paramClause()
-        accept(RPAREN)
+        vds += inParens(paramClause())
         caseParam = false
         newLineOptWhenFollowedBy(LPAREN)
       }
@@ -2368,6 +2410,7 @@ self =>
      */
     def paramType(): Tree = paramType(repeatedParameterOK = true, useStartAsPosition = false)
     def paramType(repeatedParameterOK: Boolean, useStartAsPosition: Boolean): Tree = {
+      println("paramType")
       val start = in.offset
       in.token match {
         case ARROW  =>
@@ -2737,6 +2780,7 @@ self =>
      *  }}}
      */
     def funDefOrDcl(start : Int, mods: Modifiers): Tree = {
+      println(s"at ${in.token}")
       in.nextToken()
       if (in.token == THIS) {
         def missingEquals() = deprecationWarning(in.lastOffset, "procedure syntax is deprecated for constructors: add `=`, as in method definition", "2.13.2")
@@ -2767,9 +2811,12 @@ self =>
         val tparams = typeParamClauseOpt(name, contextBoundBuf)
         val vparamss = paramClauses(name, contextBoundBuf.toList, ofCaseClass = false)
         newLineOptWhenFollowedBy(LBRACE)
+        println(s"at ${in} or ${in.offset}")
         var restype = fromWithinReturnType(typedOpt())
+        println(s"at $restype ${in} or ${in.offset}")
         def msg(what: String, instead: String) =
           s"procedure syntax is $what: instead, add `$instead` to explicitly declare `$name`'s return type"
+        println(s"fundefrest at ${token2string(in.token)} or ${in.offset}")
         val rhs =
           if (isStatSep || in.token == RBRACE) {
             if (restype.isEmpty) {
@@ -2792,9 +2839,11 @@ self =>
                 newmods |= Flags.MACRO
               }
             } else {
+              println("EQ")
               accept(EQUALS)
             }
             expr()
+              .tap(res => println(s"RHS is $res"))
           }
         DefDef(newmods, name.toTermName, tparams, vparamss, restype, rhs)
       }
@@ -3144,7 +3193,9 @@ self =>
         else syntaxErrorOrIncompleteAnd(errorMsg, skipIt = true)(Nil)
       while (!isStatSeqEnd) {
         stats ++= stat.applyOrElse(in.token, default)
+        println(s"Stats at ${in.offset} are $stats")
         acceptStatSepOpt()
+        println(s"After StatSepOpt at ${in.offset} are $stats")
       }
       stats.toList
     }
@@ -3175,6 +3226,7 @@ self =>
      * @param isPre specifies whether in early initializer (true) or not (false)
      */
     def templateStatSeq(isPre : Boolean): (ValDef, List[Tree]) = {
+      println("tmpseq")
       var self: ValDef = noSelfType
       var firstOpt: Option[Tree] = None
       if (isExprIntro) checkNoEscapingPlaceholders {
@@ -3197,7 +3249,11 @@ self =>
           acceptStatSepOpt()
         }
       }
-      (self, firstOpt ++: templateStats())
+      println("tmpseq stats")
+      val tseq = templateStats()
+      println("tmpseq stats done")
+      (self, firstOpt ++: tseq)
+      //(self, firstOpt ++: templateStats())
     }
 
     /** {{{
