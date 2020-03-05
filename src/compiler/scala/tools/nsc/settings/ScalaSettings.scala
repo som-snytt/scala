@@ -120,7 +120,6 @@ trait ScalaSettings extends StandardScalaSettings with Warnings {
   val maxerrs            = IntSetting          ("-Xmaxerrs", "Maximum errors to print", 100, None, _ => None)
   val maxwarns           = IntSetting          ("-Xmaxwarns", "Maximum warnings to print", 100, None, _ => None)
   val Xmigration         = ScalaVersionSetting ("-Xmigration", "version", "Warn about constructs whose behavior may have changed since version.", initial = NoScalaVersion, default = Some(AnyScalaVersion))
-  val nouescape          = BooleanSetting      ("-Xno-uescape", "Disable handling of \\u unicode escapes.")
   val Xjline             = ChoiceSetting       (
     name    = "-Xjline",
     helpArg = "mode",
