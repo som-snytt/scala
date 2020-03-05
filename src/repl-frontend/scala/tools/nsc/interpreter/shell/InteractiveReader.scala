@@ -14,8 +14,6 @@ package scala.tools.nsc.interpreter.shell
 
 import java.io.IOException
 
-import InteractiveReader._
-
 /** Reads lines from an input stream */
 trait InteractiveReader {
   def interactive: Boolean

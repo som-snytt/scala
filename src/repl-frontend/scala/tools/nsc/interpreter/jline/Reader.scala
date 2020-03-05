@@ -81,7 +81,7 @@ object Reader {
 
     val reader = builder.build()
     locally {
-      import LineReader._, Option._
+      import LineReader._
       // VIINS, VICMD, EMACS
       val keymap = if (config.viMode) VIINS else EMACS
       reader.getKeyMaps.put(MAIN, reader.getKeyMaps.get(keymap));
@@ -112,7 +112,6 @@ object Reader {
       else scalaParser.parse(line, cursor, context)
   }
   class ScalaParser(repl: Repl) extends Parser {
-    import scala.util.{Left, Right}
     import Results._
 
     def parse(line: String, cursor: Int, context: ParseContext): ParsedLine = {
