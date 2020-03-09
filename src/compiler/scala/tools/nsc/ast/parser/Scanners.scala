@@ -445,6 +445,7 @@ trait Scanners extends ScannersCommon {
        * - the current token can start a statement and the one before can end it
        * insert NEWLINES if we are past a blank line, NEWLINE otherwise
        */
+      println(s"maybe insertNL? ${!applyBracePatch()}, ${afterLineEnd()}, ${inLastOfStat(lastToken)}, ${inFirstOfStat(token)}, ${sepRegions}")
       if (!applyBracePatch() && afterLineEnd() && inLastOfStat(lastToken) && inFirstOfStat(token) &&
           (sepRegions.isEmpty || sepRegions.head == RBRACE)) {
         println(s"insertNL?")

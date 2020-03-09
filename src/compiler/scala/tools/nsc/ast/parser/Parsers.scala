@@ -1008,11 +1008,12 @@ self =>
         }
         else {
           println(s"before tuple types is ${token2string(in.token)} at ${in.offset}")
+          /*
           in.nextToken()
           val ts = functionTypes()
           accept(RPAREN)
           println(s"after tuple types is ${token2string(in.token)} at ${in.offset}")
-          /*
+          */
           //val ts = inParens(functionTypes())
           val ts = inParens {
             println(s"before ftypes is ${token2string(in.token)} at ${in.offset}")
@@ -1022,7 +1023,6 @@ self =>
             r
           }
           println(s"types $ts, at ${token2string(in.token)}")
-          */
           if (in.token == ARROW)
             atPos(start, in.skipToken()) { makeSafeFunctionType(ts, typ()) }
           else {
@@ -2811,9 +2811,9 @@ self =>
         val tparams = typeParamClauseOpt(name, contextBoundBuf)
         val vparamss = paramClauses(name, contextBoundBuf.toList, ofCaseClass = false)
         newLineOptWhenFollowedBy(LBRACE)
-        println(s"at ${in} or ${in.offset}")
+        println(s"YY at ${in} or ${in.offset}")
         var restype = fromWithinReturnType(typedOpt())
-        println(s"at $restype ${in} or ${in.offset}")
+        println(s"YY at $restype ${in} or ${in.offset}")
         def msg(what: String, instead: String) =
           s"procedure syntax is $what: instead, add `$instead` to explicitly declare `$name`'s return type"
         println(s"fundefrest at ${token2string(in.token)} or ${in.offset}")

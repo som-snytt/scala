@@ -56,4 +56,15 @@ trait t11900 {
         2,
       ) => true
     }
+
+  def p(p: (Int,
+            String,
+           )
+       ): Unit
+
+  def q: (Int,
+          String,
+         )
+
+  val z = 42
 }
