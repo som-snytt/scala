@@ -30,11 +30,6 @@ This license is used by the following third-party libraries:
 
   * Jansi
 
-### [BSD License](http://www.opensource.org/licenses/bsd-license.php)
-This license is used by the following third-party libraries:
-
-  * ScalaCheck
-
 ### [BSD 3-Clause License](http://opensource.org/licenses/BSD-3-Clause)
 This license is used by the following third-party libraries:
 
