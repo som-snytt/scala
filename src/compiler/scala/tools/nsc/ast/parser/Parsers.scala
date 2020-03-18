@@ -1634,8 +1634,9 @@ self =>
           // The case still missed is unparenthesized single argument, like "x: Int => x + 1", which
           // may be impossible to distinguish from a self-type and so remains an error.  (See #1564)
           def lhsIsTypedParamList() = t match {
-            case Parens(xs) if xs.forall(isTypedParam) => true
-            case _ => false
+            case Parens(Typed(This(_), _) :: Nil) => reporter.error(t.pos, "self-type annotation may not be in parentheses") ; false
+            case Parens(xs)                       => xs.forall(isTypedParam)
+            case _                                => false
           }
           if (in.token == ARROW && (location != InTemplate || lhsIsTypedParamList)) {
             t = atPos(t.pos.start, in.skipToken()) {
