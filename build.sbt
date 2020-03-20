@@ -46,8 +46,10 @@ val scalacheckDep     = "org.scalacheck"                %% "scalacheck"         
 val jolDep            = "org.openjdk.jol"                % "jol-core"                         % "0.9"
 val asmDep            = "org.scala-lang.modules"         % "scala-asm"                        % versionProps("scala-asm.version")
 val jlineDep          = "org.jline"                      % "jline"                            % versionProps("jline.version")
-val jansiDep          = "org.fusesource.jansi"           % "jansi"                            % versionProps("jansi.version")
-val jlineDeps         = Seq(jlineDep, jansiDep)
+val jlineTerminalDep  = "org.jline"                      % "jline-terminal"                   % versionProps("jline.version")
+val jlineJnaDep       = "org.jline"                      % "jline-terminal-jna"               % versionProps("jline.version")
+val jnaDep            = "net.java.dev.jna"               % "jna"                              % versionProps("jna.version")
+val jlineDeps         = Seq(jlineDep, jlineJnaDep)
 val testInterfaceDep  = "org.scala-sbt"                  % "test-interface"                   % "1.0"
 val diffUtilsDep      = "com.googlecode.java-diff-utils" % "diffutils"                        % "1.3.0"
 
@@ -574,7 +576,7 @@ lazy val compiler = configureAsSubproject(project)
                             |org.jline.style.*;resolution:=optional
                             |org.jline.terminal;resolution:=optional
                             |org.jline.terminal.impl;resolution:=optional
-                            |org.jline.terminal.impl.jansi.*;resolution:=optional
+                            |org.jline.terminal.impl.jna.*;resolution:=optional
                             |org.jline.terminal.spi;resolution:=optional
                             |org.jline.utils;resolution:=optional
                             |scala.*;version="$${range;[==,=+);$${ver}}"
@@ -1118,10 +1120,14 @@ lazy val dist = (project in file("dist"))
     packageBin in Compile := {
       val targetDir = (buildDirectory in ThisBuild).value / "pack" / "lib"
       val jlineJAR = findJar((dependencyClasspath in Compile).value, jlineDep).get.data
-      val jansiJAR = findJar((dependencyClasspath in Compile).value, jansiDep).get.data
+      val jlineTerminalJAR = findJar((dependencyClasspath in Compile).value, jlineTerminalDep).get.data
+      val jlineJnaJAR = findJar((dependencyClasspath in Compile).value, jlineJnaDep).get.data
+      val jnaJAR = findJar((dependencyClasspath in Compile).value, jnaDep).get.data
       val mappings = Seq(
         (jlineJAR, targetDir / "jline.jar"),
-        (jansiJAR, targetDir / "jansi.jar"),
+        (jlineTerminalJAR, targetDir / "jline-terminal.jar"),
+        (jlineJnaJAR, targetDir / "jline-terminal-jna.jar"),
+        (jnaJAR, targetDir / "jna.jar"),
       )
       IO.copy(mappings, CopyOptions() withOverwrite true)
       targetDir
