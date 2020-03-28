@@ -151,6 +151,7 @@ trait Unapplies extends ast.TreeDSL {
   /** The apply method corresponding to a case class
    */
   def caseModuleApplyMeth(cdef: ClassDef): DefDef = {
+    println(s"case apply for $cdef")
     val inheritedMods = constrMods(cdef)
     val mods =
       if (applyShouldInheritAccess(inheritedMods))
