@@ -1,0 +1,7 @@
+t11843.scala:4: error: value $isInstanceOf is not a member of String
+  "".$isInstanceOf[Int]
+     ^
+t11843.scala:5: error: value $asInstanceOf is not a member of String
+  "".$asInstanceOf[Int]
+     ^
+two errors found

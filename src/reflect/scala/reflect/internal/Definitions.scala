@@ -1121,8 +1121,8 @@ trait Definitions extends api.StandardDefinitions {
     lazy val Object_!= = enterNewMethod(ObjectClass, nme.NE, AnyTpe :: Nil, BooleanTpe, FINAL)
     lazy val Object_eq = enterNewMethod(ObjectClass, nme.eq, AnyRefTpe :: Nil, BooleanTpe, FINAL)
     lazy val Object_ne = enterNewMethod(ObjectClass, nme.ne, AnyRefTpe :: Nil, BooleanTpe, FINAL)
-    lazy val Object_isInstanceOf = newT1NoParamsMethod(ObjectClass, nme.isInstanceOf_Ob, FINAL | SYNTHETIC | ARTIFACT)(_ => BooleanTpe)
-    lazy val Object_asInstanceOf = newT1NoParamsMethod(ObjectClass, nme.asInstanceOf_Ob, FINAL | SYNTHETIC | ARTIFACT)(_.typeConstructor)
+    lazy val Object_isInstanceOf = newT1NoParamsMethod(ObjectClass, nme.isInstanceOf_Ob, FINAL | SYNTHETIC | ARTIFACT, enter = false)(_ => BooleanTpe)
+    lazy val Object_asInstanceOf = newT1NoParamsMethod(ObjectClass, nme.asInstanceOf_Ob, FINAL | SYNTHETIC | ARTIFACT, enter = false)(_.typeConstructor)
     lazy val Object_synchronized = newPolyMethod(1, ObjectClass, nme.synchronized_, FINAL)(tps =>
       (Some(List(tps.head.typeConstructor)), tps.head.typeConstructor)
     )
@@ -1358,24 +1358,25 @@ trait Definitions extends api.StandardDefinitions {
       clazz setInfo GenPolyType(List(tparam), ClassInfoType(parents, newScope, clazz)) markAllCompleted
     }
 
-    def newPolyMethod(typeParamCount: Int, owner: Symbol, name: TermName, flags: Long)(createFn: PolyMethodCreator): MethodSymbol = {
+    def newPolyMethod(typeParamCount: Int, owner: Symbol, name: TermName, flags: Long, enter: Boolean = true)(createFn: PolyMethodCreator): MethodSymbol = {
       val msym    = owner.newMethod(name.encode, NoPosition, flags)
       val tparams = msym.newSyntheticTypeParams(typeParamCount)
       val mtpe    = createFn(tparams) match {
         case (Some(formals), restpe) => MethodType(msym.newSyntheticValueParams(formals), restpe)
         case (_, restpe)             => NullaryMethodType(restpe)
       }
-
-      msym setInfoAndEnter genPolyType(tparams, mtpe) markAllCompleted
+      msym setInfo genPolyType(tparams, mtpe)
+      if (enter) msym.owner.info.decls enter msym
+      msym.markAllCompleted()
     }
 
     /** T1 means one type parameter.
      */
-    def newT1NullaryMethod(owner: Symbol, name: TermName, flags: Long)(createFn: Symbol => Type): MethodSymbol = {
-      newPolyMethod(1, owner, name, flags)(tparams => (None, createFn(tparams.head)))
+    def newT1NullaryMethod(owner: Symbol, name: TermName, flags: Long, enter: Boolean = true)(createFn: Symbol => Type): MethodSymbol = {
+      newPolyMethod(1, owner, name, flags, enter)(tparams => (None, createFn(tparams.head)))
     }
-    def newT1NoParamsMethod(owner: Symbol, name: TermName, flags: Long)(createFn: Symbol => Type): MethodSymbol = {
-      newPolyMethod(1, owner, name, flags)(tparams => (util.SomeOfNil, createFn(tparams.head)))
+    def newT1NoParamsMethod(owner: Symbol, name: TermName, flags: Long, enter: Boolean = true)(createFn: Symbol => Type): MethodSymbol = {
+      newPolyMethod(1, owner, name, flags, enter)(tparams => (util.SomeOfNil, createFn(tparams.head)))
     }
 
     /** Is symbol a phantom class for which no runtime representation exists? */
