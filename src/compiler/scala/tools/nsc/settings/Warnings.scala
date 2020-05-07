@@ -33,6 +33,7 @@ trait Warnings {
     "-Wconf",
     "patterns",
     "Configure reporting of compiler warnings; use `help` for details.",
+    default = WconfDefault,
     helpText = Some(
       s"""Configure compiler warnings.
          |Syntax: -Wconf:<filters>:<action>,<filters>:<action>,...
@@ -95,7 +96,6 @@ trait Warnings {
          |Note: on the command-line you might need to quote configurations containing `*` or `&`
          |to prevent the shell from expanding patterns.""".stripMargin),
     prepend = true)
-  locally { Wconf.tryToSet(WconfDefault); Wconf.clearSetByUser() }
 
   // Non-lint warnings. -- TODO turn into MultiChoiceEnumeration
   val warnMacros           = ChoiceSetting(

@@ -221,8 +221,8 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
     add(new ChoiceSetting(name, helpArg, descr, choices, default, choicesHelp))
   def IntSetting(name: String, descr: String, default: Int, range: Option[(Int, Int)], parser: String => Option[Int]) =
     add(new IntSetting(name, descr, default, range, parser))
-  def MultiStringSetting(name: String, arg: String, descr: String, helpText: Option[String] = None, prepend: Boolean = false) =
-    add(new MultiStringSetting(name, arg, descr, helpText, prepend))
+  def MultiStringSetting(name: String, arg: String, descr: String, default: List[String] = Nil, helpText: Option[String] = None, prepend: Boolean = false) =
+    add(new MultiStringSetting(name, arg, descr, default, helpText, prepend))
   def MultiChoiceSetting[E <: MultiChoiceEnumeration](name: String, helpArg: String, descr: String, domain: E, default: Option[List[String]] = None) =
     add(new MultiChoiceSetting[E](name, helpArg, descr, domain, default))
   def OutputSetting(outputDirs: OutputDirs, default: String) = add(new OutputSetting(default).tap(_ => outputDirs.setSingleOutput(default)))
@@ -760,11 +760,12 @@ class MutableSettings(val errorFn: String => Unit, val pathFactory: PathFactory)
     name: String,
     val arg: String,
     descr: String,
+    default: List[String],
     helpText: Option[String],
     prepend: Boolean)
   extends Setting(name, descr) with Clearable {
     type T = List[String]
-    protected var v: T = Nil
+    protected var v: T = default
     protected var sawHelp: Boolean = false
 
     withHelpSyntax(name + ":<" + arg + ">")
