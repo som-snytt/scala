@@ -154,11 +154,7 @@ trait Warnings {
   // They are not activated by -Xlint and can't be enabled on the command line because they are not
   // created using the standard factory methods.
 
-  val warnValueOverrides = {
-    val flag = new BooleanSetting("value-overrides", "Generated value class method overrides an implementation.")
-    flag.value = false
-    flag
-  }
+  val warnValueOverrides = new BooleanSetting("value-overrides", "Generated value class method overrides an implementation.", default = false)
 
   // Lint warnings
 
