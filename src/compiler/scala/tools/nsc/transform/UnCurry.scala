@@ -290,12 +290,12 @@ abstract class UnCurry extends InfoTransform
             else if (tp.upperBound ne tp) getClassTag(tp.upperBound)
             else localTyper.TyperErrorGen.MissingClassTagError(tree, tp)
           }
-          def traversableClassTag(tpe: Type): Tree = {
-            (tpe baseType TraversableClass).typeArgs match {
+          // traversable or iterable?
+          def traversableClassTag(tpe: Type): Tree =
+            tpe.baseType(TraversableClass).typeArgs match {
               case targ :: _  => getClassTag(targ)
               case _          => EmptyTree
             }
-          }
           exitingUncurry {
             localTyper.typedPos(pos) {
               gen.mkMethodCall(tree, toArraySym, Nil, List(traversableClassTag(tree.tpe)))
