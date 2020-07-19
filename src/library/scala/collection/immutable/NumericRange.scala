@@ -302,16 +302,16 @@ object NumericRange {
         val endint = num.toInt(end)
         if (end == num.fromInt(endint)) {
           val stepint = num.toInt(step)
-          if (step == num.fromInt(stepint))
-            return
-              if (isInclusive) Range.inclusive(startint, endint, stepint).length
-              else             Range          (startint, endint, stepint).length
+          if (step == num.fromInt(stepint)) {
+            val r = if (isInclusive) Range.inclusive(startint, endint, stepint) else Range(startint, endint, stepint)
+            return r.length
+          }
         }
       }
       // If we reach this point, deferring to Int failed.
-      // Numbers may be big.
+      // Numbers may be big. Throw exception if math is inaccurate (including no progress at all).
       if (num.isInstanceOf[Numeric.BigDecimalAsIfIntegral])
-        bigDecimalCheckUnderflow(start, end, step)  // Throw exception if math is inaccurate (including no progress at all)
+        bigDecimalCheckUnderflow(start, end, step)
       val one   = num.one
       val limit = num.fromInt(Int.MaxValue)
       def check(t: T): T =
@@ -331,17 +331,35 @@ object NumericRange {
         }
         else {
           // We might not even be able to subtract these numbers.
-          // Jump in three pieces:
-          //   * start to -1 or 1, whichever is closer (waypointA)
-          //   * one step, which will take us at least to 0 (ends at waypointB)
-          //   * there to the end
+          // Count the steps in three segments:
+          //   * from start to a point inside (-1, 1) called waypointA
+          //   * from waypointA to a point on the other side of zero called waypointB
+          //   * from waypointB to the end
+          // Any of these segments can be degenerate.
           val negone    = num.fromInt(-1)
-          val startlim  = if (posStep) negone else one
-          val startdiff = num.minus(startlim, start)
-          val startq    = check(num.quot(startdiff, step))
-          val waypointA = if (startq == zero) start else num.plus(start, num.times(startq, step))
-          val waypointB = num.plus(waypointA, step)
+          // locate waypointA and steps to get there
+          val (waypointA, startq) = {
+            val startlim  = if (posStep) negone else one
+            if (num.lt(start, startlim) == upward) {
+              println(s"$start < $startlim == $upward")
+              val startdiff = num.minus(startlim, start)
+              println(s"startlim $startlim diff $startdiff")
+              val startq0    = check(num.quot(startdiff, step))
+              val waypointA0 = if (startq0 == zero) start else num.plus(start, num.times(startq0, step))
+              (waypointA0, startq0)
+            }
+            else {
+              println(s"$start < $startlim != $upward")
+              (start, zero)
+            }
+          }
+          // locate waypointB and steps to get there
+          val (waypointB, midq) = {
+            num.plus(waypointA, step)
+          }
+          println(s"startq $startq wA $waypointA wB $waypointB")
           check {
+            println(s"wB < end ${num.lt(waypointB, end)}, upward $upward")
             if (num.lt(waypointB, end) != upward) {
               // No last piece
               if (isInclusive && waypointB == end) num.plus(startq, num.fromInt(2))
@@ -349,8 +367,11 @@ object NumericRange {
             }
             else {
               // There is a last piece
-              val enddiff = num.minus(end,waypointB)
+              val enddiff = num.minus(end, waypointB)
+              println(s"enddiff = end - waypointB ${num.minus(end, waypointB)}")
+              println(s"quot(enddiff, step) ${num.quot(enddiff, step)} where step $step")
               val endq    = check(num.quot(enddiff, step))
+              println(s"endq $endq")
               val last    = if (endq == zero) waypointB else num.plus(waypointB, num.times(endq, step))
               // Now we have to tally up all the pieces
               //   1 for the initial value

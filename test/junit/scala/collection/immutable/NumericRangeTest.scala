@@ -5,7 +5,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 
-import scala.tools.testkit.AssertUtil.assertThrows
+import scala.tools.testkit.AssertUtil.{assertSameElements, assertThrows}
 
 @RunWith(classOf[JUnit4])
 class NumericRangeTest {
@@ -72,11 +72,17 @@ class NumericRangeTest {
   @Test
   def `t12073`(): Unit = {
     val start = BigDecimal(-2E-34)
-    val inc = BigDecimal(1E-34)
-    val end = BigDecimal(1E-64)
-    val ok  = List.unfold(start)(prec => Option.when(prec < end)(prec -> (prec + inc)))
-    println(ok)
-    val bad = Range.BigDecimal(start, end, inc).toList
-    println(bad)
+    val end   = BigDecimal(1E-64)
+    val inc   = BigDecimal(1E-34)
+    println(s"($start, $end, $inc)")
+    val ok    = List.unfold(start)(prec => Option.when(prec < end)(prec -> (prec + inc)))
+    assertSameElements(List(-2.0E-34, -1.0E-34, 0E-35), ok)
+    def countem: Int = {
+      import Range.BigDecimal.bigDecAsIntegral
+      NumericRange.count(start, end, inc, isInclusive = false)
+    }
+    assertEquals(3, countem)
+    val bad = Range.BigDecimal(start, end, inc).length
+    assertEquals(3, bad)
   }
 }
