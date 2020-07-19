@@ -73,7 +73,8 @@ sealed class NumericRange[T](
 
   // See comment in Range for why this must be lazy.
   override lazy val length: Int = NumericRange.count(start, end, step, isInclusive)
-  override def isEmpty = length == 0
+  //override def isEmpty = length == 0
+  override def isEmpty = start > end && num.gt(step, num.zero) || start < end && num.lt(step, num.zero) || start == end && !isInclusive
   override def last: T =
     if (length == 0) Nil.head
     else locationAfterN(length - 1)
@@ -276,7 +277,7 @@ object NumericRange {
   }
 
   /** Calculates the number of elements in a range given start, end, step, and
-    *  whether or not it is inclusive.  Throws an exception if step == 0 or
+    *  whether it is inclusive.  Throws an exception if step == 0 or
     *  the number of elements exceeds the maximum Int.
     */
   def count[T](start: T, end: T, step: T, isInclusive: Boolean)(implicit num: Integral[T]): Int = {
@@ -301,28 +302,25 @@ object NumericRange {
         val endint = num.toInt(end)
         if (end == num.fromInt(endint)) {
           val stepint = num.toInt(step)
-          if (step == num.fromInt(stepint)) {
-            return {
+          if (step == num.fromInt(stepint))
+            return
               if (isInclusive) Range.inclusive(startint, endint, stepint).length
               else             Range          (startint, endint, stepint).length
-            }
-          }
         }
       }
       // If we reach this point, deferring to Int failed.
       // Numbers may be big.
-      if (num.isInstanceOf[Numeric.BigDecimalAsIfIntegral]) {
+      if (num.isInstanceOf[Numeric.BigDecimalAsIfIntegral])
         bigDecimalCheckUnderflow(start, end, step)  // Throw exception if math is inaccurate (including no progress at all)
-      }
-      val one = num.one
+      val one   = num.one
       val limit = num.fromInt(Int.MaxValue)
       def check(t: T): T =
-        if (num.gt(t, limit)) throw new IllegalArgumentException("More than Int.MaxValue elements.")
+        if (num.gt(t, limit)) throw new IllegalArgumentException(s"$t is more than Int.MaxValue elements.")
         else t
       // If the range crosses zero, it might overflow when subtracted
       val startside = num.sign(start)
-      val endside = num.sign(end)
-      num.toInt{
+      val endside   = num.sign(end)
+      num.toInt {
         if (num.gteq(num.times(startside, endside), zero)) {
           // We're sure we can subtract these numbers.
           // Note that we do not use .rem because of different conventions for Long and BigInt
@@ -337,7 +335,7 @@ object NumericRange {
           //   * start to -1 or 1, whichever is closer (waypointA)
           //   * one step, which will take us at least to 0 (ends at waypointB)
           //   * there to the end
-          val negone = num.fromInt(-1)
+          val negone    = num.fromInt(-1)
           val startlim  = if (posStep) negone else one
           val startdiff = num.minus(startlim, start)
           val startq    = check(num.quot(startdiff, step))

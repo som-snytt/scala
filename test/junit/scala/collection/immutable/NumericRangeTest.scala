@@ -68,4 +68,15 @@ class NumericRangeTest {
       nr.zip(upscale).forall { case (x, x100) => x*100 == x100 }
     }
   }
+
+  @Test
+  def `t12073`(): Unit = {
+    val start = BigDecimal(-2E-34)
+    val inc = BigDecimal(1E-34)
+    val end = BigDecimal(1E-64)
+    val ok  = List.unfold(start)(prec => Option.when(prec < end)(prec -> (prec + inc)))
+    println(ok)
+    val bad = Range.BigDecimal(start, end, inc).toList
+    println(bad)
+  }
 }
