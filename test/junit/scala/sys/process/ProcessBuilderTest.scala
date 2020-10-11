@@ -22,4 +22,10 @@ class ProcessBuilderTest {
       assertTrue("Expected realizing bad command to fail.", q.isFailure)
     }
   }
+
+  @Test def `t12185 lazyLines must not hold head`: Unit = {
+    val is = ???
+    val label = "t12185"
+    val p = new ProcessBuilder.IStreamBuilder(is, label)
+  }
 }
