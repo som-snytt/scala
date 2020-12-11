@@ -2167,7 +2167,19 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
     def analyzeSuperConsructor(meth: Symbol, vparamss: List[List[ValDef]], rhs: Tree): Unit = {
       val clazz = meth.owner
       debuglog(s"computing param aliases for $clazz:${clazz.primaryConstructor.tpe}:$rhs")
+      println(s"computing param aliases for $clazz:${clazz.primaryConstructor.tpe}:$vparamss:$rhs")
       val pending = ListBuffer[AbsTypeError]()
+
+      def checkSuperArg(arg: Tree): Unit = {
+        if (arg.symbol.isModule)
+          pending += SuperConstrReferenceError(arg)
+        if (arg.isInstanceOf[This])
+          pending += SuperConstrArgsThisReferenceError(arg)
+        if (arg.symbol.isModule)
+          println(s"Checked module $arg")
+        if (arg.isInstanceOf[This])
+          println(s"Checked this $arg")
+      }
 
       // !!! This method is redundant with other, less buggy ones.
       def decompose(call: Tree): (Tree, List[Tree]) = call match {
@@ -2176,19 +2188,11 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
         case Apply(fn, args) =>
           // an object cannot be allowed to pass a reference to itself to a superconstructor
           // because of initialization issues; scala/bug#473, scala/bug#3913, scala/bug#6928.
-          foreachSubTreeBoundTo(args, clazz) { tree =>
-            if (tree.symbol.isModule)
-              pending += SuperConstrReferenceError(tree)
-            tree match {
-              case This(_) =>
-                pending += SuperConstrArgsThisReferenceError(tree)
-              case _ => ()
-            }
-          }
+          foreachSubTreeBoundTo(clazz)(args)(checkSuperArg)
           val (superConstr, preArgs) = decompose(fn)
           val params = fn.tpe.params
           // appending a dummy tree to represent Nil for an empty varargs (is this really necessary?)
-          val applyArgs = if (args.sizeCompare(params) < 0) args :+ EmptyTree else args take params.length
+          val applyArgs = if (args.sizeCompare(params) < 0) args :+ EmptyTree else args.take(params.length)
 
           assert(sameLength(applyArgs, params) || call.isErrorTyped,
             s"arity mismatch but call is not error typed: $clazz (params=$params, args=$applyArgs)")
@@ -2221,9 +2225,8 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
                 }
               }
             }
-            if (!accToSuperAcc.isEmpty) {
+            if (!accToSuperAcc.isEmpty)
               superConstructorCalls(clazz) = accToSuperAcc
-            }
           }
         }
       }
@@ -2237,33 +2240,27 @@ trait Typers extends Adaptations with Tags with TypersTracking with PatternTyper
       ddef.rhs match {
         case Block(stats, expr) =>
           val selfConstructorCall = stats.headOption.getOrElse(expr)
-          foreachSubTreeBoundTo(List(selfConstructorCall), clazz) {
-            case tree @ This(_) =>
-              pending += SelfConstrArgsThisReferenceError(tree)
-            case _ => ()
+          foreachSubTreeBoundTo(clazz)(List(selfConstructorCall)) { tree =>
+            if (tree.isInstanceOf[This]) pending += SelfConstrArgsThisReferenceError(tree)
           }
         case _ =>
       }
       pending.foreach(ErrorUtils.issueTypeError)
     }
 
-    /**
-     * Run the provided function for each sub tree of `trees` that
-     * are bound to a symbol with `clazz` as a base class.
+    /** Run the provided function for each sub tree of `trees` that
+     *  are bound to a symbol with `clazz` as a base class.
      *
-     * @param f This function can assume that `tree.symbol` is non null
+     *  @param f This function can assume that `tree.symbol` is non null
      */
-    private def foreachSubTreeBoundTo[A](trees: List[Tree], clazz: Symbol)(f: Tree => Unit): Unit =
-      for {
-        tree <- trees
-        subTree <- tree
-      } {
+    private def foreachSubTreeBoundTo(clazz: Symbol)(trees: List[Tree])(f: Tree => Unit): Unit =
+      for (tree <- trees ; subTree <- tree) {
         val sym = subTree.symbol
         if (sym != null && sym.info.baseClasses.contains(clazz))
           f(subTree)
       }
 
-      /** Check if a structurally defined method violates implementation restrictions.
+    /** Check if a structurally defined method violates implementation restrictions.
      *  A method cannot be called if it is a non-private member of a refinement type
      *  and if its parameter's types are any of:
      *    - the self-type of the refinement
