@@ -439,10 +439,8 @@ class VectorTest {
     val (pre, suf) = v.splitAt(1)
     val v2 = suf.prependedAll(pre)
     validateDebug(v2)
-    // Validation failed: assertion failed: sum of slice lengths (1024) at prefix2 should be equal to prefix length (1023)
-    // [error] Vector3(lengths=[32, 1023, 9215, 9984, 10000])
     assertEquals(10000, v.last)
-    assertEquals(10000, v2(v2.length-1)) // ArrayIndexOutOfBoundsException
+    assertEquals(10000, v2(v2.length-1))
     assertEquals(1024, v2(1023))
   }
   @Test def `t12598b bad index on prependedAll`: Unit = {
@@ -450,10 +448,8 @@ class VectorTest {
     val (pre, suf) = v.splitAt(1)
     val v2 = suf.prependedAll(pre)
     validateDebug(v2)
-    // Validation failed: assertion failed: sum of slice lengths (1024) at prefix2 should be equal to prefix length (1023)
-    // [error] Vector3(lengths=[32, 1023, 9215, 9984, 10000])
-    assertEquals(10000, v.last)
-    assertEquals(10000, v2(v2.length-1)) // ArrayIndexOutOfBoundsException
+    assertEquals(1000000, v.last)
+    assertEquals(1000000, v2(v2.length-1))
     assertEquals(1024, v2(1023))
   }
 }
