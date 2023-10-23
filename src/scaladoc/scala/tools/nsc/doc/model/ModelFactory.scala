@@ -318,27 +318,21 @@ class ModelFactory(val global: Global, val settings: doc.Settings) {
 
       if (!settings.docsourceurl.isDefault)
         inSource.map { case (file, line) =>
-          // file path is relative to source root (-sourcepath)
-          val src = Paths.get(settings.sourcepath.value).toUri
-          val path = file.file.toPath.toUri
-          val filePathExt = src.relativize(path)
-          val rawPath: String = filePathExt.getRawPath
+          val filePathExt = {
+            // file path is relative to source root (-sourcepath); use an absolute path otherwise
+            val sp = settings.sourcepath.value
+            val fileUri = file.file.toPath.toUri
+            if (sp.isEmpty) fileUri.getRawPath
+            else Paths.get(sp).toUri.relativize(fileUri).getRawPath
+          }
           val (filePath, fileExt) =
-            rawPath.lastIndexOf('.') match {
-              case -1 => (rawPath, "")
-              case i  => rawPath.splitAt(i)
+            filePathExt.lastIndexOf('.') match {
+              case -1 => (filePathExt, "")
+              case i  => filePathExt.splitAt(i)
             }
           val tplOwner = this.inTemplate.qualifiedName
           val tplName = this.name
-          def substitute(name: String): String = name match {
-            case FILE_PATH     => filePath
-            case FILE_EXT      => fileExt
-            case FILE_PATH_EXT => filePathExt.toString
-            case FILE_LINE     => line.toString
-            case TPL_OWNER     => tplOwner
-            case TPL_NAME      => tplName
-          }
-          val patchedString = tokens.replaceAllIn(settings.docsourceurl.value, m => quoteReplacement(substitute(m.group(1))) )
+          val patchedString = expandUrl(settings.docsourceurl.value, filePath, fileExt, filePathExt, line, tplOwner, tplName)
           new URI(patchedString).toURL
         }
       else None
@@ -1061,11 +1055,38 @@ object ModelFactory {
   val defaultGroupDesc = None
   val defaultGroupPriority = 1000
 
-  val tokens = raw"€\{($FILE_PATH|$FILE_EXT|$FILE_PATH_EXT|$FILE_LINE|$TPL_OWNER|$TPL_NAME)\}".r
+  // 4 subgroups: (.?), (FILE_PATH|FILE_PATH_EXT), (FILE_EXT) and (FILE_LINE|TPL_OWNER|TPL_NAME). non-matching are `null`
+  val tokens = raw"(?:(.?)€\{($FILE_PATH|$FILE_PATH_EXT)\}|\.?€\{($FILE_EXT)\}|€\{($FILE_LINE|$TPL_OWNER|$TPL_NAME)\})".r
   final val FILE_PATH     = "FILE_PATH"
   final val FILE_EXT      = "FILE_EXT"
   final val FILE_PATH_EXT = "FILE_PATH_EXT"
   final val FILE_LINE     = "FILE_LINE"
   final val TPL_OWNER     = "TPL_OWNER"
   final val TPL_NAME      = "TPL_NAME"
+
+  val WordChar = raw"(\w)".r
+
+  def expandUrl(urlTemplate: String, filePath: String, fileExt: String, filePathExt: String, line: Int, tplOwner: String, tplName: String): String = {
+    val absolute = filePath.startsWith("/")
+
+    def subst(groups: List[String]): String = {
+      // If a relative path follows a word character, insert a `/`
+      def sep: String = groups.head match {
+        case null => ""
+        case WordChar(c) if !absolute => c + "/"
+        case c => c
+      }
+
+      groups.tail.find(_ != null).get match {
+        case FILE_PATH => s"$sep$filePath"
+        case FILE_EXT => fileExt
+        case FILE_PATH_EXT => s"$sep$filePathExt"
+        case FILE_LINE => line.toString
+        case TPL_OWNER => tplOwner
+        case TPL_NAME => tplName
+      }
+    }
+
+    tokens.replaceAllIn(urlTemplate, m => quoteReplacement(subst(m.subgroups)))
+  }
 }
