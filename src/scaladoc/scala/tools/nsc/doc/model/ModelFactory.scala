@@ -1055,8 +1055,7 @@ object ModelFactory {
   val defaultGroupDesc = None
   val defaultGroupPriority = 1000
 
-  // 4 subgroups: (.?), (FILE_PATH|FILE_PATH_EXT), (FILE_EXT) and (FILE_LINE|TPL_OWNER|TPL_NAME). non-matching are `null`
-  val tokens = raw"(?:(.?)€\{($FILE_PATH|$FILE_PATH_EXT)\}|\.?€\{($FILE_EXT)\}|€\{($FILE_LINE|$TPL_OWNER|$TPL_NAME)\})".r
+  val tokens = raw"€\{($FILE_PATH|$FILE_EXT|$FILE_PATH_EXT|$FILE_LINE|$TPL_OWNER|$TPL_NAME)\}".r
   final val FILE_PATH     = "FILE_PATH"
   final val FILE_EXT      = "FILE_EXT"
   final val FILE_PATH_EXT = "FILE_PATH_EXT"
@@ -1069,24 +1068,22 @@ object ModelFactory {
   def expandUrl(urlTemplate: String, filePath: String, fileExt: String, filePathExt: String, line: Int, tplOwner: String, tplName: String): String = {
     val absolute = filePath.startsWith("/")
 
-    def subst(groups: List[String]): String = {
+    def subst(token: String, index: Int): String = {
       // If a relative path follows a word character, insert a `/`
-      def sep: String = groups.head match {
-        case null => ""
-        case WordChar(c) if !absolute => c + "/"
-        case c => c
-      }
+      def sep: String =
+        if (index > 0 && !absolute && WordChar.matches(urlTemplate.substring(index-1, index))) "/"
+        else ""
+      def dotted: Boolean = index > 0 && urlTemplate(index-1) == '.'
 
-      groups.tail.find(_ != null).get match {
-        case FILE_PATH => s"$sep$filePath"
-        case FILE_EXT => fileExt
+      token match {
+        case FILE_PATH     => s"$sep$filePath"
+        case FILE_EXT      => if (dotted) fileExt.stripPrefix(".") else fileExt
         case FILE_PATH_EXT => s"$sep$filePathExt"
-        case FILE_LINE => line.toString
-        case TPL_OWNER => tplOwner
-        case TPL_NAME => tplName
+        case FILE_LINE     => line.toString
+        case TPL_OWNER     => tplOwner
+        case TPL_NAME      => tplName
       }
     }
-
-    tokens.replaceAllIn(urlTemplate, m => quoteReplacement(subst(m.subgroups)))
+    tokens.replaceAllIn(urlTemplate, m => quoteReplacement(subst(m.group(1), m.start)))
   }
 }

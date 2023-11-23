@@ -22,5 +22,8 @@ class ModelFactoryTest {
     // file extension: don't duplicate `.`
     t("/base/p/file.scala", "/base€{FILE_PATH}€{FILE_EXT}", filePath = "p/file", fileExt = ".scala")
     t("/base/p/file.scala", "/base/€{FILE_PATH}.€{FILE_EXT}", filePath = "p/file", fileExt =".scala")
+
+    t("p/file.scala", "€{FILE_PATH}.€{FILE_EXT}", filePath = "p/file", fileExt =".scala")
+    t("p/file", "€{FILE_PATH}", filePath = "p/file", fileExt =".scala")
   }
 }
