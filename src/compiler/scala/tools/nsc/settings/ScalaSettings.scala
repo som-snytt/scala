@@ -90,7 +90,7 @@ trait ScalaSettings extends StandardScalaSettings with Warnings { _: MutableSett
       // TODO validate release <= java.specification.version
     }
   } withAbbreviation "--release"
-  def releaseValue: Option[String] = Option(release.value).filter(_ != "")
+  def releaseValue: Option[String] = Option(release.value).filter(_ != "")  // release.valueSetByUser
 
   /**
    * -X "Advanced" settings
