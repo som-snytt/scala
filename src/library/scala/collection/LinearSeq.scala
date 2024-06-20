@@ -47,13 +47,8 @@ trait LinearSeqOps[+A, +CC[X] <: LinearSeq[X], +C <: LinearSeq[A] with LinearSeq
     else new LinearSeqIterator[A](this)
 
   def length: Int = {
-    var these = coll
-    var len = 0
-    while (these.nonEmpty) {
-      len += 1
-      these = these.tail
-    }
-    len
+    @tailrec def loop(these: LinearSeq[A], acc: Int): Int = if (these.isEmpty) acc else loop(these.tail, acc + 1)
+    loop(coll, acc = 0)
   }
 
   override def last: A = {
@@ -119,69 +114,38 @@ trait LinearSeqOps[+A, +CC[X] <: LinearSeq[X], +C <: LinearSeq[A] with LinearSeq
   }
 
   override def foreach[U](f: A => U): Unit = {
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      f(these.head)
-      these = these.tail
-    }
+    @tailrec def loop(these: LinearSeq[A]): Unit = if (!these.isEmpty) { f(these.head): Unit ; loop(these.tail) }
+    loop(coll)
   }
 
   override def forall(p: A => Boolean): Boolean = {
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      if (!p(these.head)) return false
-      these = these.tail
-    }
-    true
+    @tailrec def loop(these: LinearSeq[A]): Boolean = these.isEmpty || p(these.head) && loop(these.tail)
+    loop(coll)
   }
 
   override def exists(p: A => Boolean): Boolean = {
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      if (p(these.head)) return true
-      these = these.tail
-    }
-    false
+    @tailrec def loop(these: LinearSeq[A]): Boolean = !these.isEmpty && p(these.head) || loop(these.tail)
+    loop(coll)
   }
 
   override def contains[A1 >: A](elem: A1): Boolean = {
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      if (these.head == elem) return true
-      these = these.tail
-    }
-    false
+    @tailrec def loop(these: LinearSeq[A]): Boolean = !these.isEmpty && (these.head == elem) || loop(these.tail)
+    loop(coll)
   }
 
   override def find(p: A => Boolean): Option[A] = {
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      if (p(these.head)) return Some(these.head)
-      these = these.tail
-    }
-    None
+    @tailrec def loop(these: LinearSeq[A]): Option[A] = if (these.isEmpty) None else if (p(these.head)) Some(these.head) else loop(these.tail)
+    loop(coll)
   }
 
   override def foldLeft[B](z: B)(op: (B, A) => B): B = {
-    var acc = z
-    var these: LinearSeq[A] = coll
-    while (!these.isEmpty) {
-      acc = op(acc, these.head)
-      these = these.tail
-    }
-    acc
+    @tailrec def loop(these: LinearSeq[A], acc: B): B = if (these.isEmpty) acc else { val acc1 = op(acc, these.head) ; loop(these.tail, acc1) }
+    loop(coll, z)
   }
 
   override def sameElements[B >: A](that: IterableOnce[B]): Boolean = {
     @tailrec def linearSeqEq(a: LinearSeq[B], b: LinearSeq[B]): Boolean =
-      (a eq b) || {
-        if (a.nonEmpty && b.nonEmpty && a.head == b.head) {
-          linearSeqEq(a.tail, b.tail)
-        }
-        else {
-          a.isEmpty && b.isEmpty
-        }
-      }
+      (a eq b) || a.isEmpty && b.isEmpty || !a.isEmpty && !b.isEmpty && (a.head == b.head) && linearSeqEq(a.tail, b.tail)
 
     that match {
       case that: LinearSeq[B] => linearSeqEq(coll, that)
@@ -190,53 +154,30 @@ trait LinearSeqOps[+A, +CC[X] <: LinearSeq[X], +C <: LinearSeq[A] with LinearSeq
   }
 
   override def segmentLength(p: A => Boolean, from: Int): Int = {
-    var i = 0
-    var seq = drop(from)
-    while (seq.nonEmpty && p(seq.head)) {
-      i += 1
-      seq = seq.tail
-    }
-    i
+    @tailrec def loop(these: LinearSeq[A], acc: Int): Int = if (these.isEmpty || !p(these.head)) acc else loop(these.tail, acc + 1)
+    loop(coll.drop(from), acc = 0)
   }
 
   override def indexWhere(p: A => Boolean, from: Int): Int = {
-    var i = math.max(from, 0)
-    var these: LinearSeq[A] = this drop from
-    while (these.nonEmpty) {
-      if (p(these.head))
-        return i
-
-      i += 1
-      these = these.tail
-    }
-    -1
+    @tailrec def loop(these: LinearSeq[A], acc: Int): Int = if (these.isEmpty) -1 else if (!p(these.head)) acc else loop(these.tail, acc + 1)
+    val i = math.max(from, 0)
+    loop(coll.drop(i), acc = i)
   }
 
   override def lastIndexWhere(p: A => Boolean, end: Int): Int = {
-    var i = 0
-    var these: LinearSeq[A] = coll
-    var last = -1
-    while (!these.isEmpty && i <= end) {
-      if (p(these.head)) last = i
-      these = these.tail
-      i += 1
-    }
-    last
+    @tailrec def loop(these: LinearSeq[A], i: Int, last: Int): Int = if (these.isEmpty || i > end) last else loop(these.tail, i, (if (p(these.head)) i else last))
+    loop(coll, 0, -1)
   }
 
   override def findLast(p: A => Boolean): Option[A] = {
-    var these: LinearSeq[A] = coll
-    var found = false
-    var last: A = null.asInstanceOf[A] // don't use `Option`, to prevent excessive `Some` allocation
-    while (these.nonEmpty) {
-      val elem = these.head
-      if (p(elem)) {
-        found = true
-        last = elem
-      }
-      these = these.tail
-    }
-    if (found) Some(last) else None
+    @tailrec def loop(these: LinearSeq[A], last: A, found: Boolean): Option[A] =
+      if (these.isEmpty)
+        if (found) Some(last) else None
+      else if (p(these.head))
+        loop(these.tail, these.head, found = true)
+      else
+        loop(these.tail, last, found)
+    loop(coll, null.asInstanceOf[A], found = false)
   }
 
   override def tails: Iterator[C] = {
